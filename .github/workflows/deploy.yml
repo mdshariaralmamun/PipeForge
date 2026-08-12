@@ -1,0 +1,28 @@
+# Auto-deploy to the VPS on every push to main.
+# Requires repo secrets: VPS_HOST, VPS_USER, VPS_SSH_KEY
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-pipeforge
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull, rebuild and restart on the VPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/pipeforge
+            git pull --ff-only
+            docker compose up -d --build web
+            docker image prune -f

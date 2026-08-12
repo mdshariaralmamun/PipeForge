@@ -1,0 +1,16 @@
+# PipeForge — Caddy reverse proxy with automatic HTTPS.
+# Caddy provisions and renews the Let's Encrypt certificate by itself
+# as soon as DNS for pipeforge.shariar.dev points at this server.
+
+pipeforge.shariar.dev {
+	reverse_proxy web:3000
+
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+}

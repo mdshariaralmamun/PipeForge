@@ -1,0 +1,30 @@
+services:
+  web:
+    build: .
+    restart: unless-stopped
+    expose:
+      - '3000'
+
+  # Reverse proxy with automatic HTTPS.
+  # Only start this when PipeForge is the ONLY site on the server:
+  #   docker compose --profile proxy up -d --build
+  # If price.shariar.dev already runs its own Caddy on this VPS, do NOT start
+  # a second one — add the pipeforge.shariar.dev block to the existing
+  # Caddyfile instead (see DEPLOY.md).
+  caddy:
+    image: caddy:2-alpine
+    profiles: ['proxy']
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+
+volumes:
+  caddy_data:
+  caddy_config:
