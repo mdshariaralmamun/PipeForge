@@ -28,6 +28,12 @@ export default function Toolbar() {
   const finishSketch = useAssembly((s) => s.finishSketch);
   const cancelSketch = useAssembly((s) => s.cancelSketch);
   const setAiOpen = useAssembly((s) => s.setAiOpen);
+  const customDefs = useAssembly((s) => s.customDefs);
+  const mergeCustomDefs = useAssembly((s) => s.mergeCustomDefs);
+  const undo = useAssembly((s) => s.undo);
+  const redo = useAssembly((s) => s.redo);
+  const canUndo = useAssembly((s) => s.past.length > 0);
+  const canRedo = useAssembly((s) => s.future.length > 0);
   const loadProject = useAssembly((s) => s.loadProject);
   const clearAll = useAssembly((s) => s.clearAll);
 
@@ -40,7 +46,7 @@ export default function Toolbar() {
   const save = () => {
     downloadText(
       `pipeforge-project-${timestamp()}.json`,
-      serializeProject(placed),
+      serializeProject(placed, customDefs),
       "application/json",
     );
   };
@@ -54,7 +60,8 @@ export default function Toolbar() {
       window.alert("Not a valid PipeForge project file.");
       return;
     }
-    loadProject(parsed);
+    if (parsed.customDefs.length > 0) mergeCustomDefs(parsed.customDefs);
+    loadProject(parsed.placed);
   };
 
   const reset = () => {
@@ -139,6 +146,13 @@ export default function Toolbar() {
       </button>
 
       <div className="mx-1 h-5 w-px bg-neutral-800" />
+
+      <button onClick={undo} disabled={!canUndo} className={btnCls} title="Undo (Ctrl+Z)">
+        ⟲ Undo
+      </button>
+      <button onClick={redo} disabled={!canRedo} className={btnCls} title="Redo (Ctrl+Y / Ctrl+Shift+Z)">
+        ⟳ Redo
+      </button>
 
       <button onClick={save} className={btnCls} title="Save project as JSON">
         Save

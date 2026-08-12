@@ -22,6 +22,7 @@ function newUid(): string {
 }
 
 const IDENTITY: Quat = [0, 0, 0, 1];
+const HISTORY_LIMIT = 50;
 
 export interface AssemblyState {
   placed: PlacedComponent[];
@@ -39,6 +40,8 @@ export interface AssemblyState {
   splitTarget: string | null; // uid of a stretchable tube to split mid-run
   fitNonce: number; // increments to trigger a camera zoom-to-fit
   aiOpen: boolean; // AI prompt panel open
+  past: PlacedComponent[][]; // undo stack (snapshots of `placed`)
+  future: PlacedComponent[][]; // redo stack
 
   placePart: (defId: string) => void;
   select: (uid: string | null) => void;
@@ -52,6 +55,7 @@ export interface AssemblyState {
   setSelectedLength: (len: number) => void;
   autoConnectSelected: () => void;
   addCustomDef: (def: ComponentDef) => void;
+  mergeCustomDefs: (defs: ComponentDef[]) => void;
   clearNotice: () => void;
   setDragging: (v: boolean) => void;
   moveSelectedTo: (x: number, z: number) => void;
@@ -64,6 +68,8 @@ export interface AssemblyState {
   zoomFit: () => void;
   setAiOpen: (v: boolean) => void;
   say: (msg: string) => void;
+  undo: () => void;
+  redo: () => void;
   deleteSelected: () => void;
   disconnect: (uid: string, portId: string) => void;
   setViewMode: (v: ViewMode) => void;
@@ -71,6 +77,12 @@ export interface AssemblyState {
   toggleMto: () => void;
   clearAll: () => void;
   loadProject: (placed: PlacedComponent[]) => void;
+}
+
+// History fields that push the current `placed` onto the undo stack.
+// Call inside every structural mutation, BEFORE changing placed.
+function hist(s: AssemblyState): Pick<AssemblyState, "past" | "future"> {
+  return { past: [...s.past.slice(-(HISTORY_LIMIT - 1)), s.placed], future: [] };
 }
 
 export const useAssembly = create<AssemblyState>()((set, get) => ({
@@ -89,6 +101,8 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
   splitTarget: null,
   fitNonce: 0,
   aiOpen: false,
+  past: [],
+  future: [],
 
   placePart: (defId) => {
     const def = getDef(defId);
@@ -130,6 +144,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
         // Chain building: jump the active port to the new part's next free port.
         const nextFree = def.ports.find((p) => p.id !== cPort.id);
         set({
+          ...hist(s),
           placed: [...placed, placedNew],
           selectedUid: uid,
           activePort: nextFree ? { uid, portId: nextFree.id } : null,
@@ -167,6 +182,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
       if (!anyOverlap(drop, s.placed)) break;
     }
     set({
+      ...hist(s),
       placed: [...s.placed, drop],
       selectedUid: uid,
       notice: null,
@@ -187,6 +203,8 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
 
   setCompatOnly: (v) => set({ compatOnly: v }),
 
+  // Fine moves (nudge / mouse drag) intentionally skip history — one undo step
+  // per 0.25 in move would flood the stack.
   nudgeSelected: (dx, dy, dz) => {
     const s = get();
     const sel = s.placed.find((p) => p.uid === s.selectedUid);
@@ -211,6 +229,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
     );
     q.premultiply(dq);
     set({
+      ...hist(s),
       placed: s.placed.map((p) =>
         p.uid === sel.uid ? { ...p, quaternion: [q.x, q.y, q.z, q.w] } : p,
       ),
@@ -221,6 +240,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
     const sel = get().selectedUid;
     if (!sel) return;
     set((s) => ({
+      ...hist(s),
       placed: s.placed
         .filter((p) => p.uid !== sel)
         .map((p) =>
@@ -239,6 +259,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
       const conn = part?.connections.find((c) => c.portId === portId);
       if (!conn) return {};
       return {
+        ...hist(s),
         placed: s.placed.map((p) => {
           if (p.uid === uid)
             return { ...p, connections: p.connections.filter((c) => c !== conn) };
@@ -265,7 +286,8 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
 
   toggleMto: () => set((s) => ({ mtoOpen: !s.mtoOpen })),
 
-  clearAll: () => set({ placed: [], selectedUid: null, activePort: null }),
+  clearAll: () =>
+    set((s) => ({ ...hist(s), placed: [], selectedUid: null, activePort: null })),
 
   rotateSelectedBy: (axis, degrees) => {
     const s = get();
@@ -278,6 +300,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
     );
     q.premultiply(dq);
     set({
+      ...hist(s),
       placed: s.placed.map((p) =>
         p.uid === sel.uid ? { ...p, quaternion: [q.x, q.y, q.z, q.w] } : p,
       ),
@@ -292,6 +315,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
     if (!def?.stretchable) return;
     const clamped = Math.min(36, Math.max(1, len));
     set({
+      ...hist(s),
       placed: s.placed.map((p) =>
         p.uid === sel.uid ? { ...p, lengthOverride: clamped } : p,
       ),
@@ -335,6 +359,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
     const b = best;
     const snapped = snapOnto(b.other, b.oPort, def, b.sPort, sel.uid);
     set({
+      ...hist(s),
       placed: s.placed.map((p) => {
         if (p.uid === sel.uid) return snapped;
         if (p.uid === b.other.uid)
@@ -364,9 +389,25 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
     });
   },
 
+  // Merge custom defs (e.g. from a loaded project file), deduped by id.
+  mergeCustomDefs: (defs) =>
+    set((s) => {
+      const fresh = defs.filter((d) => !s.customDefs.some((c) => c.id === d.id));
+      for (const d of fresh) registerCustomDef(d);
+      if (fresh.length === 0) return {};
+      const customDefs = [...s.customDefs, ...fresh];
+      try {
+        localStorage.setItem(CUSTOM_STORAGE_KEY, serializeCustomDefs(customDefs));
+      } catch {
+        // storage unavailable
+      }
+      return { customDefs };
+    }),
+
   clearNotice: () => set({ notice: null }),
 
-  setDragging: (v) => set({ dragging: v }),
+  // Drag start snapshots once, so a whole drag = one undo step.
+  setDragging: (v) => set((s) => (v ? { ...hist(s), dragging: true } : { dragging: false })),
 
   moveSelectedTo: (x, z) => {
     const s = get();
@@ -481,6 +522,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
 
     if (newParts.length === 0) return;
     set({
+      ...hist(s),
       placed: [...s.placed, ...newParts],
       selectedUid: prev?.uid ?? null,
       notice: `Run drafted: ${newParts.length} parts (1/4 in ULTRON tube, orbital-weld joints).`,
@@ -494,6 +536,38 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
   setAiOpen: (v) => set({ aiOpen: v }),
 
   say: (msg) => set({ notice: msg }),
+
+  undo: () =>
+    set((s) => {
+      if (s.past.length === 0) return {};
+      const past = [...s.past];
+      const placed = past.pop()!;
+      return {
+        past,
+        future: [...s.future, s.placed],
+        placed,
+        selectedUid: null,
+        activePort: null,
+        splitTarget: null,
+        notice: null,
+      };
+    }),
+
+  redo: () =>
+    set((s) => {
+      if (s.future.length === 0) return {};
+      const future = [...s.future];
+      const placed = future.pop()!;
+      return {
+        future,
+        past: [...s.past, s.placed],
+        placed,
+        selectedUid: null,
+        activePort: null,
+        splitTarget: null,
+        notice: null,
+      };
+    }),
 
   insertInMiddle: (defId) => {
     const s = get();
@@ -561,6 +635,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
       ],
     };
     set({
+      ...hist(s),
       placed: [...s.placed.filter((p) => p.uid !== target.uid), segA, segB, mid],
       splitTarget: null,
       selectedUid: uidMid,
@@ -568,7 +643,8 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
     });
   },
 
-  loadProject: (placed) => set({ placed, selectedUid: null, activePort: null }),
+  loadProject: (placed) =>
+    set((s) => ({ ...hist(s), placed, selectedUid: null, activePort: null })),
 }));
 
 // Snap transform: make two port faces coincident and their axes anti-parallel

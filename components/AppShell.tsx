@@ -42,8 +42,12 @@ export default function AppShell() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
-        const placed = parseProject(raw);
-        if (placed && placed.length > 0) useAssembly.getState().loadProject(placed);
+        const parsed = parseProject(raw);
+        if (parsed) {
+          if (parsed.customDefs.length > 0)
+            useAssembly.getState().mergeCustomDefs(parsed.customDefs);
+          if (parsed.placed.length > 0) useAssembly.getState().loadProject(parsed.placed);
+        }
       }
     } catch {
       // storage unavailable or corrupt — start empty
@@ -53,7 +57,7 @@ export default function AppShell() {
       clearTimeout(timer);
       timer = setTimeout(() => {
         try {
-          localStorage.setItem(STORAGE_KEY, serializeProject(state.placed));
+          localStorage.setItem(STORAGE_KEY, serializeProject(state.placed, state.customDefs));
         } catch {
           // ignore quota/availability errors
         }
@@ -78,16 +82,25 @@ export default function AppShell() {
       )
         return;
       const st = useAssembly.getState();
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
-        e.preventDefault();
-        downloadText(
-          `pipeforge-project-${timestamp()}.json`,
-          serializeProject(st.placed),
-          "application/json",
-        );
+      if (e.ctrlKey || e.metaKey) {
+        const k = e.key.toLowerCase();
+        if (k === "z" && !e.shiftKey) {
+          e.preventDefault();
+          st.undo();
+        } else if (k === "y" || (k === "z" && e.shiftKey)) {
+          e.preventDefault();
+          st.redo();
+        } else if (k === "s") {
+          e.preventDefault();
+          downloadText(
+            `pipeforge-project-${timestamp()}.json`,
+            serializeProject(st.placed, st.customDefs),
+            "application/json",
+          );
+        }
         return;
       }
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.altKey) return;
       switch (e.key.toLowerCase()) {
         case "z":
           st.zoomFit();
