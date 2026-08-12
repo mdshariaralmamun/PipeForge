@@ -25,6 +25,7 @@ export default function CatalogPanel() {
   const clearActivePort = useAssembly((s) => s.clearActivePort);
   const placePart = useAssembly((s) => s.placePart);
   const customDefs = useAssembly((s) => s.customDefs);
+  const systemDefs = useAssembly((s) => s.systemDefs);
   const splitTarget = useAssembly((s) => s.splitTarget);
   const setSplitTarget = useAssembly((s) => s.setSplitTarget);
   const [previewId, setPreviewId] = useState<string | null>(null);
@@ -45,7 +46,7 @@ export default function CatalogPanel() {
 
   const list = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return [...CATALOG, ...customDefs].filter((d) => {
+    return [...CATALOG, ...systemDefs, ...customDefs].filter((d) => {
       if (splitDef) {
         // Only straight-through weld fittings of the same size can split a tube.
         const size = splitDef.ports[0]?.size;
@@ -70,7 +71,7 @@ export default function CatalogPanel() {
         return false;
       return true;
     });
-  }, [search, family, brand, size, activeTarget, compatOnly, customDefs, splitDef]);
+  }, [search, family, brand, size, activeTarget, compatOnly, customDefs, systemDefs, splitDef]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -184,6 +185,9 @@ export default function CatalogPanel() {
             <div className="font-mono text-[13px] text-amber-400/90">{d.partNumber}</div>
             <div className="text-xs leading-tight text-neutral-300">{d.description}</div>
             <div className="mt-1 flex flex-wrap gap-1">
+              {systemDefs.some((sd) => sd.id === d.id) && (
+                <span className={`${badgeCls} text-cyan-300`}>System</span>
+              )}
               <span className={badgeCls}>{d.brand}</span>
               <span className={badgeCls}>{d.sizeLabel}</span>
               <span className={badgeCls}>

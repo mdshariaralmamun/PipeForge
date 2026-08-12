@@ -11,7 +11,9 @@ import PropertiesPanel from "./PropertiesPanel";
 import Toolbar from "./Toolbar";
 import { useAssembly } from "@/lib/assembly";
 import { registerCustomDef } from "@/lib/catalog";
+import { fetchApprovedDefs } from "@/lib/cloudCatalog";
 import { CUSTOM_STORAGE_KEY, parseCustomDefs } from "@/lib/custom";
+import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { parseProject, serializeProject, STORAGE_KEY } from "@/lib/project";
 import { downloadText, timestamp } from "@/lib/viewer";
 
@@ -188,6 +190,20 @@ export default function AppShell() {
   useEffect(() => {
     if (window.innerWidth < 768 && useAssembly.getState().mtoOpen)
       useAssembly.getState().toggleMto();
+  }, []);
+
+  // Load the approved shared catalog (system parts) when Supabase is configured.
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+    void (async () => {
+      try {
+        const defs = await fetchApprovedDefs();
+        for (const d of defs) registerCustomDef(d);
+        useAssembly.getState().setSystemDefs(defs);
+      } catch {
+        // offline / not configured — local catalog only
+      }
+    })();
   }, []);
 
   return (

@@ -17,7 +17,7 @@ export function serializeProject(
   return JSON.stringify({ app: "pipeforge", version: 2, placed, customDefs }, null, 2);
 }
 
-function isComponentDef(raw: unknown): raw is ComponentDef {
+export function isComponentDef(raw: unknown): raw is ComponentDef {
   const d = raw as ComponentDef;
   return (
     !!d &&

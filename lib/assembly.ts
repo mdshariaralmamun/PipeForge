@@ -47,6 +47,7 @@ export interface AssemblyState {
   cloudOpen: boolean; // cloud projects dialog open
   cloudId: string | null; // currently open cloud project
   cloudName: string | null;
+  systemDefs: ComponentDef[]; // approved shared-catalog parts (read-only)
 
   placePart: (defId: string) => void;
   select: (uid: string | null) => void;
@@ -77,6 +78,7 @@ export interface AssemblyState {
   closePanels: () => void;
   setCloudOpen: (v: boolean) => void;
   setCloudRef: (id: string | null, name: string | null) => void;
+  setSystemDefs: (defs: ComponentDef[]) => void;
   say: (msg: string) => void;
   undo: () => void;
   redo: () => void;
@@ -118,6 +120,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
   cloudOpen: false,
   cloudId: null,
   cloudName: null,
+  systemDefs: [],
 
   placePart: (defId) => {
     const def = getDef(defId);
@@ -559,6 +562,8 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
   setCloudOpen: (v) => set({ cloudOpen: v }),
 
   setCloudRef: (id, name) => set({ cloudId: id, cloudName: name }),
+
+  setSystemDefs: (defs) => set({ systemDefs: defs }),
 
   say: (msg) => set({ notice: msg }),
 
