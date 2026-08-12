@@ -40,6 +40,8 @@ export interface AssemblyState {
   splitTarget: string | null; // uid of a stretchable tube to split mid-run
   fitNonce: number; // increments to trigger a camera zoom-to-fit
   aiOpen: boolean; // AI prompt panel open
+  panelLeft: boolean; // mobile drawer: catalog open
+  panelRight: boolean; // mobile drawer: properties open
   past: PlacedComponent[][]; // undo stack (snapshots of `placed`)
   future: PlacedComponent[][]; // redo stack
 
@@ -67,6 +69,9 @@ export interface AssemblyState {
   insertInMiddle: (defId: string) => void;
   zoomFit: () => void;
   setAiOpen: (v: boolean) => void;
+  toggleLeftPanel: () => void;
+  toggleRightPanel: () => void;
+  closePanels: () => void;
   say: (msg: string) => void;
   undo: () => void;
   redo: () => void;
@@ -101,6 +106,8 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
   splitTarget: null,
   fitNonce: 0,
   aiOpen: false,
+  panelLeft: false,
+  panelRight: false,
   past: [],
   future: [],
 
@@ -534,6 +541,12 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
   zoomFit: () => set((s) => ({ fitNonce: s.fitNonce + 1 })),
 
   setAiOpen: (v) => set({ aiOpen: v }),
+
+  toggleLeftPanel: () => set((s) => ({ panelLeft: !s.panelLeft, panelRight: false })),
+
+  toggleRightPanel: () => set((s) => ({ panelRight: !s.panelRight, panelLeft: false })),
+
+  closePanels: () => set({ panelLeft: false, panelRight: false }),
 
   say: (msg) => set({ notice: msg }),
 

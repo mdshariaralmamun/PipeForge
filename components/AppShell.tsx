@@ -29,6 +29,9 @@ const Viewport = dynamic(() => import("./Viewport"), {
 export default function AppShell() {
   const notice = useAssembly((s) => s.notice);
   const clearNotice = useAssembly((s) => s.clearNotice);
+  const panelLeft = useAssembly((s) => s.panelLeft);
+  const panelRight = useAssembly((s) => s.panelRight);
+  const closePanels = useAssembly((s) => s.closePanels);
 
   // Hydrate from localStorage once, then autosave on every change (debounced).
   useEffect(() => {
@@ -172,11 +175,18 @@ export default function AppShell() {
           st.clearNotice();
           st.setDrawing(null);
           st.setAiOpen(false);
+          st.closePanels();
           break;
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // MTO starts collapsed on small screens.
+  useEffect(() => {
+    if (window.innerWidth < 768 && useAssembly.getState().mtoOpen)
+      useAssembly.getState().toggleMto();
   }, []);
 
   return (
@@ -195,16 +205,33 @@ export default function AppShell() {
           </button>
         </div>
       )}
-      <div className="flex min-h-0 flex-1">
-        <aside className="flex w-72 shrink-0 flex-col border-r border-neutral-800 bg-neutral-900">
+      <div className="relative flex min-h-0 flex-1">
+        {/* Panels: static sidebars on desktop, slide-over drawers on mobile */}
+        <aside
+          className={`flex w-72 shrink-0 flex-col border-r border-neutral-800 bg-neutral-900 max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:transition-transform max-md:duration-200 ${
+            panelLeft ? "max-md:translate-x-0" : "max-md:-translate-x-full"
+          }`}
+        >
           <CatalogPanel />
         </aside>
-        <main className="relative min-w-0 flex-1 bg-neutral-950">
+        <main className="relative min-w-0 flex-1 bg-neutral-950 [touch-action:none]">
           <Viewport />
         </main>
-        <aside className="flex w-80 shrink-0 flex-col border-l border-neutral-800 bg-neutral-900">
+        <aside
+          className={`flex w-80 shrink-0 flex-col border-l border-neutral-800 bg-neutral-900 max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:z-40 max-md:transition-transform max-md:duration-200 ${
+            panelRight ? "max-md:translate-x-0" : "max-md:translate-x-full"
+          }`}
+        >
           <PropertiesPanel />
         </aside>
+        {/* Scrim closes the drawers (mobile only) */}
+        {(panelLeft || panelRight) && (
+          <button
+            aria-label="Close panels"
+            onClick={closePanels}
+            className="absolute inset-0 z-30 bg-black/50 md:hidden"
+          />
+        )}
       </div>
       <MtoPanel />
       <DrawingPanel />

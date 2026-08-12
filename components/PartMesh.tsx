@@ -48,6 +48,12 @@ const hdpeMat = new THREE.MeshStandardMaterial({
   roughness: 0.65,
 });
 
+// Bigger tap targets on touch devices.
+const COARSE =
+  typeof window !== "undefined" &&
+  (window.matchMedia?.("(pointer: coarse)").matches ?? false);
+const TAP = COARSE ? 1.7 : 1;
+
 type Axis = "x" | "y" | "z";
 const AXIS_ROT: Record<Axis, [number, number, number]> = {
   x: [0, 0, Math.PI / 2],
@@ -694,7 +700,7 @@ export default function PartMesh({ placed }: { placed: PlacedComponent }) {
               setActivePort(placed.uid, p.id);
             }}
           >
-            <sphereGeometry args={[isActive ? 0.1 : 0.075, 16, 16]} />
+            <sphereGeometry args={[(isActive ? 0.1 : 0.075) * TAP, 16, 16]} />
             <meshStandardMaterial
               color={isActive ? "#facc15" : connectedPort ? "#4b5563" : "#22c55e"}
               emissive={isActive ? "#facc15" : connectedPort ? "#000000" : "#22c55e"}
@@ -712,7 +718,7 @@ export default function PartMesh({ placed }: { placed: PlacedComponent }) {
             setSplitTarget(splitTarget === placed.uid ? null : placed.uid);
           }}
         >
-          <boxGeometry args={[0.16, 0.16, 0.16]} />
+          <boxGeometry args={[0.16 * TAP, 0.16 * TAP, 0.16 * TAP]} />
           <meshStandardMaterial
             color={splitTarget === placed.uid ? "#facc15" : "#22d3ee"}
             emissive={splitTarget === placed.uid ? "#facc15" : "#22d3ee"}

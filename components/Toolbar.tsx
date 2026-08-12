@@ -34,6 +34,8 @@ export default function Toolbar() {
   const redo = useAssembly((s) => s.redo);
   const canUndo = useAssembly((s) => s.past.length > 0);
   const canRedo = useAssembly((s) => s.future.length > 0);
+  const toggleLeftPanel = useAssembly((s) => s.toggleLeftPanel);
+  const toggleRightPanel = useAssembly((s) => s.toggleRightPanel);
   const loadProject = useAssembly((s) => s.loadProject);
   const clearAll = useAssembly((s) => s.clearAll);
 
@@ -70,7 +72,14 @@ export default function Toolbar() {
   };
 
   return (
-    <header className="flex shrink-0 items-center gap-2 border-b border-neutral-800 bg-neutral-900 px-4 py-2">
+    <header className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-neutral-800 bg-neutral-900 px-4 py-2">
+      <button
+        onClick={toggleLeftPanel}
+        className={`${btnCls} md:hidden`}
+        title="Open the parts catalog"
+      >
+        ☰ Parts
+      </button>
       <div className="mr-3">
         <span className="text-sm font-semibold tracking-wide text-neutral-100">
           Pipe<span className="text-amber-400">Forge</span>
@@ -171,6 +180,13 @@ export default function Toolbar() {
         Clear
       </button>
 
+      <button
+        onClick={toggleRightPanel}
+        className={`${btnCls} md:hidden`}
+        title="Open properties"
+      >
+        ⚙ Props
+      </button>
       <div className="flex-1" />
       <a
         href="/help"

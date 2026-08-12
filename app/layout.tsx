@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -16,6 +16,12 @@ export const metadata: Metadata = {
   title: "PipeForge — 3D Piping Designer",
   description:
     "Browser-based 3D piping assembly designer: snap tube fittings, valves and UHP parts together, and export a material take-off.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1, // stop input-focus zoom jumps on mobile
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
