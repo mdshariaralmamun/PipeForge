@@ -42,8 +42,20 @@ export default function CloudPanel() {
   }, []);
 
   useEffect(() => {
-    if (open && user) void refresh();
-  }, [open, user, refresh]);
+    if (!open || !user) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const list = await listProjects();
+        if (!cancelled) setProjects(list);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, user]);
 
   if (!open) return null;
 
