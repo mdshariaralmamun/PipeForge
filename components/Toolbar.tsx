@@ -1,9 +1,13 @@
 "use client";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useRef } from "react";
 import { useAssembly } from "@/lib/assembly";
 import { parseProject, serializeProject } from "@/lib/project";
 import type { ViewMode } from "@/lib/types";
+import { createClient } from "@/lib/supabase/client";
+import { useSession } from "@/lib/useSession";
 import { downloadDataUrl, downloadText, timestamp, viewerRef } from "@/lib/viewer";
 
 const btnCls =
@@ -36,6 +40,13 @@ export default function Toolbar() {
   const canRedo = useAssembly((s) => s.future.length > 0);
   const toggleLeftPanel = useAssembly((s) => s.toggleLeftPanel);
   const toggleRightPanel = useAssembly((s) => s.toggleRightPanel);
+  const { configured, user, role } = useSession();
+  const router = useRouter();
+
+  const signOut = async () => {
+    await createClient().auth.signOut();
+    router.refresh();
+  };
   const loadProject = useAssembly((s) => s.loadProject);
   const clearAll = useAssembly((s) => s.clearAll);
 
@@ -197,6 +208,29 @@ export default function Toolbar() {
       >
         Help
       </a>
+      {configured &&
+        (user ? (
+          <span className="flex items-center gap-2 whitespace-nowrap">
+            <span
+              className="max-w-32 truncate text-xs text-neutral-400"
+              title={user.email ?? ""}
+            >
+              {user.email}
+            </span>
+            {role === "admin" && (
+              <span className="rounded bg-amber-900/60 px-1.5 py-0.5 text-[10px] text-amber-300">
+                admin
+              </span>
+            )}
+            <button onClick={signOut} className={btnCls}>
+              Sign out
+            </button>
+          </span>
+        ) : (
+          <Link href="/login" className={btnCls}>
+            Sign in
+          </Link>
+        ))}
       <span className="text-xs text-neutral-500">
         {placed.length} part{placed.length === 1 ? "" : "s"} placed
       </span>
