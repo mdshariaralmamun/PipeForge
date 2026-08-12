@@ -40,6 +40,7 @@ export default function Toolbar() {
   const canRedo = useAssembly((s) => s.future.length > 0);
   const toggleLeftPanel = useAssembly((s) => s.toggleLeftPanel);
   const toggleRightPanel = useAssembly((s) => s.toggleRightPanel);
+  const setCloudOpen = useAssembly((s) => s.setCloudOpen);
   const { configured, user, role } = useSession();
   const router = useRouter();
 
@@ -190,6 +191,15 @@ export default function Toolbar() {
       <button onClick={reset} disabled={placed.length === 0} className={btnCls}>
         Clear
       </button>
+      {configured && (
+        <button
+          onClick={() => setCloudOpen(true)}
+          className={btnCls}
+          title="Cloud projects saved to your account"
+        >
+          Cloud
+        </button>
+      )}
 
       <button
         onClick={toggleRightPanel}

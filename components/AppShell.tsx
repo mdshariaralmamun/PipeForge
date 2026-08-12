@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import dynamic from "next/dynamic";
 import AiPanel from "./AiPanel";
 import CatalogPanel from "./CatalogPanel";
+import CloudPanel from "./CloudPanel";
 import DrawingPanel from "./DrawingPanel";
 import MtoPanel from "./MtoPanel";
 import PropertiesPanel from "./PropertiesPanel";
@@ -236,6 +237,7 @@ export default function AppShell() {
       <MtoPanel />
       <DrawingPanel />
       <AiPanel />
+      <CloudPanel />
     </div>
   );
 }

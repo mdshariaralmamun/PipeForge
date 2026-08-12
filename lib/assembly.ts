@@ -44,6 +44,9 @@ export interface AssemblyState {
   panelRight: boolean; // mobile drawer: properties open
   past: PlacedComponent[][]; // undo stack (snapshots of `placed`)
   future: PlacedComponent[][]; // redo stack
+  cloudOpen: boolean; // cloud projects dialog open
+  cloudId: string | null; // currently open cloud project
+  cloudName: string | null;
 
   placePart: (defId: string) => void;
   select: (uid: string | null) => void;
@@ -72,6 +75,8 @@ export interface AssemblyState {
   toggleLeftPanel: () => void;
   toggleRightPanel: () => void;
   closePanels: () => void;
+  setCloudOpen: (v: boolean) => void;
+  setCloudRef: (id: string | null, name: string | null) => void;
   say: (msg: string) => void;
   undo: () => void;
   redo: () => void;
@@ -110,6 +115,9 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
   panelRight: false,
   past: [],
   future: [],
+  cloudOpen: false,
+  cloudId: null,
+  cloudName: null,
 
   placePart: (defId) => {
     const def = getDef(defId);
@@ -547,6 +555,10 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
   toggleRightPanel: () => set((s) => ({ panelRight: !s.panelRight, panelLeft: false })),
 
   closePanels: () => set({ panelLeft: false, panelRight: false }),
+
+  setCloudOpen: (v) => set({ cloudOpen: v }),
+
+  setCloudRef: (id, name) => set({ cloudId: id, cloudName: name }),
 
   say: (msg) => set({ notice: msg }),
 
