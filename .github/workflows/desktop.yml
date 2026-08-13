@@ -1,0 +1,35 @@
+# Build desktop installers for Windows, macOS and Linux (manual trigger).
+# GitHub → Actions → "Desktop installers" → Run workflow. Artifacts appear
+# on the workflow run page (NSIS .exe, .dmg, .AppImage).
+name: Desktop installers
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: node scripts/build-desktop.mjs
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        run: npx electron-builder --win
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: npx electron-builder --mac
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: npx electron-builder --linux
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pipeforge-${{ runner.os }}
+          path: dist-desktop/*

@@ -9,7 +9,7 @@ import DrawingPanel from "./DrawingPanel";
 import MtoPanel from "./MtoPanel";
 import PropertiesPanel from "./PropertiesPanel";
 import Toolbar from "./Toolbar";
-import { useAssembly } from "@/lib/assembly";
+import { useAssembly, type PanelName, type PanelZone } from "@/lib/assembly";
 import { registerCustomDef } from "@/lib/catalog";
 import { fetchApprovedDefs } from "@/lib/cloudCatalog";
 import { CUSTOM_STORAGE_KEY, parseCustomDefs } from "@/lib/custom";
@@ -18,6 +18,14 @@ import { parseProject, serializeProject, STORAGE_KEY } from "@/lib/project";
 import { downloadText, timestamp } from "@/lib/viewer";
 
 const NUDGE = 0.25; // arrow-key nudge step, inches
+
+const PANELS: PanelName[] = ["catalog", "properties", "mto"];
+
+function renderPanel(p: PanelName) {
+  if (p === "catalog") return <CatalogPanel key="catalog" />;
+  if (p === "properties") return <PropertiesPanel key="properties" />;
+  return <MtoPanel key="mto" />;
+}
 
 // three.js crashes under SSR/prerender, so the viewport is client-only.
 const Viewport = dynamic(() => import("./Viewport"), {
@@ -36,12 +44,21 @@ export default function AppShell() {
   const panelRight = useAssembly((s) => s.panelRight);
   const closePanels = useAssembly((s) => s.closePanels);
   const theme = useAssembly((s) => s.theme);
+  const panelZones = useAssembly((s) => s.panelZones);
+  const leftPanels = PANELS.filter((p) => panelZones[p] === "left");
+  const rightPanels = PANELS.filter((p) => panelZones[p] === "right");
+  const bottomPanels = PANELS.filter((p) => panelZones[p] === "bottom");
 
   // Hydrate from localStorage once, then autosave on every change (debounced).
   useEffect(() => {
     try {
       const t = localStorage.getItem("pipeforge-theme");
       if (t === "light" || t === "dark") useAssembly.setState({ theme: t });
+      const pz = localStorage.getItem("pipeforge-panels");
+      if (pz) {
+        const parsed = JSON.parse(pz) as Partial<Record<PanelName, PanelZone>>;
+        useAssembly.setState((s) => ({ panelZones: { ...s.panelZones, ...parsed } }));
+      }
     } catch {
       // storage unavailable
     }
@@ -233,24 +250,39 @@ export default function AppShell() {
         </div>
       )}
       <div className="relative flex min-h-0 flex-1">
-        {/* Panels: static sidebars on desktop, slide-over drawers on mobile */}
-        <aside
-          className={`flex w-72 shrink-0 flex-col border-r border-neutral-800 bg-neutral-900 max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:transition-transform max-md:duration-200 ${
-            panelLeft ? "max-md:translate-x-0" : "max-md:-translate-x-full"
-          }`}
-        >
-          <CatalogPanel />
-        </aside>
-        <main className="relative min-w-0 flex-1 bg-neutral-950 [touch-action:none]">
-          <Viewport />
-        </main>
-        <aside
-          className={`flex w-80 shrink-0 flex-col border-l border-neutral-800 bg-neutral-900 max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:z-40 max-md:transition-transform max-md:duration-200 ${
-            panelRight ? "max-md:translate-x-0" : "max-md:translate-x-full"
-          }`}
-        >
-          <PropertiesPanel />
-        </aside>
+        {/* Dock zones: panels render where the user parked them (⇄ Move). */}
+        {leftPanels.length > 0 && (
+          <aside
+            className={`flex w-72 shrink-0 flex-col divide-y divide-neutral-800 border-r border-neutral-800 bg-neutral-900 max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:transition-transform max-md:duration-200 ${
+              panelLeft ? "max-md:translate-x-0" : "max-md:-translate-x-full"
+            }`}
+          >
+            {leftPanels.map(renderPanel)}
+          </aside>
+        )}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <main className="relative min-h-0 flex-1 bg-neutral-950 [touch-action:none]">
+            <Viewport />
+          </main>
+          {bottomPanels.length > 0 && (
+            <div className="flex max-h-72 shrink-0 divide-x divide-neutral-800 overflow-x-auto border-t border-neutral-800 bg-neutral-900">
+              {bottomPanels.map((p) => (
+                <div key={p} className="flex min-w-80 flex-1 flex-col overflow-hidden">
+                  {renderPanel(p)}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        {rightPanels.length > 0 && (
+          <aside
+            className={`flex w-80 shrink-0 flex-col divide-y divide-neutral-800 border-l border-neutral-800 bg-neutral-900 max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:z-40 max-md:transition-transform max-md:duration-200 ${
+              panelRight ? "max-md:translate-x-0" : "max-md:translate-x-full"
+            }`}
+          >
+            {rightPanels.map(renderPanel)}
+          </aside>
+        )}
         {/* Scrim closes the drawers (mobile only) */}
         {(panelLeft || panelRight) && (
           <button
@@ -260,7 +292,6 @@ export default function AppShell() {
           />
         )}
       </div>
-      <MtoPanel />
       <DrawingPanel />
       <AiPanel />
       <CloudPanel />

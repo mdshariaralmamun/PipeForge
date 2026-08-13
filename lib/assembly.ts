@@ -24,6 +24,10 @@ function newUid(): string {
 const IDENTITY: Quat = [0, 0, 0, 1];
 const HISTORY_LIMIT = 50;
 
+// Panel docking: which screen zone each UI panel lives in.
+export type PanelZone = "left" | "right" | "bottom";
+export type PanelName = "catalog" | "properties" | "mto";
+
 export interface AssemblyState {
   placed: PlacedComponent[];
   selectedUid: string | null;
@@ -49,6 +53,7 @@ export interface AssemblyState {
   cloudName: string | null;
   systemDefs: ComponentDef[]; // approved shared-catalog parts (read-only)
   theme: "dark" | "light";
+  panelZones: Record<PanelName, PanelZone>; // dock location per panel
 
   placePart: (defId: string) => void;
   select: (uid: string | null) => void;
@@ -81,6 +86,7 @@ export interface AssemblyState {
   setCloudRef: (id: string | null, name: string | null) => void;
   setSystemDefs: (defs: ComponentDef[]) => void;
   toggleTheme: () => void;
+  cyclePanel: (panel: PanelName) => void;
   say: (msg: string) => void;
   undo: () => void;
   redo: () => void;
@@ -124,6 +130,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
   cloudName: null,
   systemDefs: [],
   theme: "dark",
+  panelZones: { catalog: "left", properties: "right", mto: "bottom" },
 
   placePart: (defId) => {
     const def = getDef(defId);
@@ -577,6 +584,19 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
         // storage unavailable
       }
       return { theme };
+    }),
+
+  cyclePanel: (panel) =>
+    set((s) => {
+      const order: PanelZone[] = ["left", "right", "bottom"];
+      const next = order[(order.indexOf(s.panelZones[panel]) + 1) % order.length];
+      const panelZones = { ...s.panelZones, [panel]: next };
+      try {
+        localStorage.setItem("pipeforge-panels", JSON.stringify(panelZones));
+      } catch {
+        // storage unavailable
+      }
+      return { panelZones };
     }),
 
   say: (msg) => set({ notice: msg }),

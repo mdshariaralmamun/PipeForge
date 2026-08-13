@@ -7,6 +7,7 @@ export default function MtoPanel() {
   const placed = useAssembly((s) => s.placed);
   const mtoOpen = useAssembly((s) => s.mtoOpen);
   const toggleMto = useAssembly((s) => s.toggleMto);
+  const cyclePanel = useAssembly((s) => s.cyclePanel);
 
   const lines = buildMto(placed);
   const totalQty = lines.reduce((sum, l) => sum + l.qty, 0);
@@ -31,6 +32,13 @@ export default function MtoPanel() {
         <span className="text-xs text-neutral-500">
           {lines.length} line item{lines.length === 1 ? "" : "s"} · {totalQty} pcs
         </span>
+        <button
+          onClick={() => cyclePanel("mto")}
+          className="rounded border border-neutral-700 bg-neutral-800 px-2 py-0.5 text-[10px] text-neutral-400 hover:border-neutral-500"
+          title="Move panel (bottom → left → right)"
+        >
+          ⇄ Move
+        </button>
         <div className="flex-1" />
         <button
           onClick={exportCsv}

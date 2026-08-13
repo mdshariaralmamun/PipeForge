@@ -24,6 +24,7 @@ export default function CatalogPanel() {
   const setCompatOnly = useAssembly((s) => s.setCompatOnly);
   const clearActivePort = useAssembly((s) => s.clearActivePort);
   const placePart = useAssembly((s) => s.placePart);
+  const cyclePanel = useAssembly((s) => s.cyclePanel);
   const customDefs = useAssembly((s) => s.customDefs);
   const systemDefs = useAssembly((s) => s.systemDefs);
   const splitTarget = useAssembly((s) => s.splitTarget);
@@ -75,10 +76,17 @@ export default function CatalogPanel() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b border-neutral-800 px-3 py-2">
+      <div className="flex items-center justify-between border-b border-neutral-800 px-3 py-2">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
           Part Catalog
         </h2>
+        <button
+          onClick={() => cyclePanel("catalog")}
+          className="text-xs text-neutral-500 hover:text-amber-300"
+          title="Move panel (left → right → bottom)"
+        >
+          ⇄ Move
+        </button>
       </div>
 
       {activeTarget && (
