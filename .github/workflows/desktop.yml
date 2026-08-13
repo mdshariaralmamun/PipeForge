@@ -1,10 +1,17 @@
-# Build desktop installers for Windows, macOS and Linux (manual trigger).
-# GitHub → Actions → "Desktop installers" → Run workflow. Artifacts appear
-# on the workflow run page (NSIS .exe, .dmg, .AppImage).
+# Build desktop installers for Windows, macOS and Linux (manual trigger:
+# GitHub → Actions → "Desktop installers" → Run workflow).
+# Installers upload to the rolling "desktop-latest" release, giving stable
+# public download URLs:
+#   .../releases/latest/download/PipeForge-win.exe
+#   .../releases/latest/download/PipeForge-mac.dmg
+#   .../releases/latest/download/PipeForge-linux.AppImage
 name: Desktop installers
 
 on:
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -29,7 +36,9 @@ jobs:
       - name: Package (Linux)
         if: runner.os == 'Linux'
         run: npx electron-builder --linux
-      - uses: actions/upload-artifact@v4
+      - name: Upload installers to the desktop-latest release
+        uses: softprops/action-gh-release@v2
         with:
-          name: pipeforge-${{ runner.os }}
-          path: dist-desktop/*
+          tag_name: desktop-latest
+          name: PipeForge desktop app
+          files: dist-desktop/PipeForge-*

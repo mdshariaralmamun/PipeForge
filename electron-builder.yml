@@ -1,5 +1,6 @@
 appId: dev.shariar.pipeforge
 productName: PipeForge
+artifactName: PipeForge-${os}.${ext}
 directories:
   output: dist-desktop
 files:

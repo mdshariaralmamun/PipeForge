@@ -40,6 +40,7 @@ const chapters: [string, string][] = [
   ["systems", "13. Piping systems & safety"],
   ["files", "14. Save, load, autosave"],
   ["faq", "15. FAQ"],
+  ["desktop", "16. Desktop app downloads"],
 ];
 
 const shortcuts: [string, string][] = [
@@ -371,6 +372,36 @@ export default function HelpPage() {
               the JSON files you export. No account, no server storage.
             </LI>
           </ul>
+
+          <H2 id="desktop">16. Desktop app downloads</H2>
+          <P>
+            PipeForge also runs as a local desktop app (same features, works offline).
+            Installers are built by GitHub Actions from the same code as this site:
+          </P>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <a
+              href="https://github.com/mdshariaralmamun/PipeForge/releases/latest/download/PipeForge-win.exe"
+              className="rounded border border-amber-700 bg-amber-950/60 px-3 py-2 text-sm text-amber-300 hover:border-amber-500"
+            >
+              ⬇ Windows (.exe)
+            </a>
+            <a
+              href="https://github.com/mdshariaralmamun/PipeForge/releases/latest/download/PipeForge-mac.dmg"
+              className="rounded border border-amber-700 bg-amber-950/60 px-3 py-2 text-sm text-amber-300 hover:border-amber-500"
+            >
+              ⬇ macOS (.dmg)
+            </a>
+            <a
+              href="https://github.com/mdshariaralmamun/PipeForge/releases/latest/download/PipeForge-linux.AppImage"
+              className="rounded border border-amber-700 bg-amber-950/60 px-3 py-2 text-sm text-amber-300 hover:border-amber-500"
+            >
+              ⬇ Linux (.AppImage)
+            </a>
+          </div>
+          <P>
+            Note: accounts / cloud sync in the desktop app require the Supabase env vars at
+            build time; otherwise it runs in local-only mode.
+          </P>
 
           <div className="mt-14 border-t border-neutral-800 pt-4 text-xs text-neutral-500">
             PipeForge — 3D UHP / industrial piping designer · pipeforge.shariar.dev
