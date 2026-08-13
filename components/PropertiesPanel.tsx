@@ -14,6 +14,7 @@ const STEP = 0.25; // inches
 export default function PropertiesPanel() {
   const placed = useAssembly((s) => s.placed);
   const selectedUid = useAssembly((s) => s.selectedUid);
+  const selectedCount = useAssembly((s) => s.selectedUids.length);
   const activePort = useAssembly((s) => s.activePort);
   const setActivePort = useAssembly((s) => s.setActivePort);
   const disconnect = useAssembly((s) => s.disconnect);
@@ -86,6 +87,13 @@ export default function PropertiesPanel() {
           ⇄ Move
         </button>
       </div>
+
+      {selectedCount > 1 && (
+        <div className="border-b border-neutral-800 bg-neutral-800/40 px-3 py-1.5 text-[11px] text-neutral-400">
+          {selectedCount} parts selected (Ctrl+click). Move / rotate / delete apply to all
+          free selected parts.
+        </div>
+      )}
 
       <div className="border-b border-neutral-800 p-3">
         <div className="font-mono text-sm text-amber-400">{def.partNumber}</div>

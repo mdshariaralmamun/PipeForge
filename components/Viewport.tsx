@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { Canvas } from "@react-three/fiber";
 import {
   GizmoHelper,
@@ -46,6 +47,8 @@ export default function Viewport() {
   const sketchPoints = useAssembly((s) => s.sketchPoints);
   const addSketchPoint = useAssembly((s) => s.addSketchPoint);
   const theme = useAssembly((s) => s.theme);
+  const openContextMenu = useAssembly((s) => s.openContextMenu);
+  const canvasMenuStart = useRef<{ x: number; y: number } | null>(null);
 
   return (
     <Canvas
@@ -55,6 +58,17 @@ export default function Viewport() {
       }}
       onPointerMissed={() => {
         if (!sketchMode) clearSelection();
+      }}
+      onPointerDown={(e) => {
+        if (e.button === 2) canvasMenuStart.current = { x: e.clientX, y: e.clientY };
+      }}
+      onPointerUp={(e) => {
+        if (e.button !== 2) return;
+        const start = canvasMenuStart.current;
+        canvasMenuStart.current = null;
+        // Right-click on empty space: canvas command menu.
+        if (start && Math.abs(e.clientX - start.x) + Math.abs(e.clientY - start.y) < 6)
+          openContextMenu(e.clientX, e.clientY, null);
       }}
     >
       <color attach="background" args={[theme === "light" ? "#dde3ea" : "#0b0e12"]} />

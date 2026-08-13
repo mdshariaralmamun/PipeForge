@@ -30,7 +30,9 @@ export type PanelName = "catalog" | "properties" | "mto";
 
 export interface AssemblyState {
   placed: PlacedComponent[];
-  selectedUid: string | null;
+  selectedUid: string | null; // primary selection (drives the Properties panel)
+  selectedUids: string[]; // full selection set (Ctrl+click multi-select)
+  contextMenu: { x: number; y: number; uid: string | null } | null; // right-click menu
   activePort: ActivePortRef | null;
   compatOnly: boolean; // when a port is active, limit catalog to compatible parts
   viewMode: ViewMode;
@@ -57,6 +59,10 @@ export interface AssemblyState {
 
   placePart: (defId: string) => void;
   select: (uid: string | null) => void;
+  toggleSelect: (uid: string) => void; // Ctrl+click multi-select
+  disconnectAll: (uid: string) => void;
+  openContextMenu: (x: number, y: number, uid: string | null) => void;
+  closeContextMenu: () => void;
   setActivePort: (uid: string, portId: string) => void;
   clearActivePort: () => void;
   clearSelection: () => void;
@@ -108,6 +114,8 @@ function hist(s: AssemblyState): Pick<AssemblyState, "past" | "future"> {
 export const useAssembly = create<AssemblyState>()((set, get) => ({
   placed: [],
   selectedUid: null,
+  selectedUids: [],
+  contextMenu: null,
   activePort: null,
   compatOnly: true,
   viewMode: "3d",
@@ -217,7 +225,26 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
     });
   },
 
-  select: (uid) => set({ selectedUid: uid }),
+  select: (uid) =>
+    set(
+      uid === null
+        ? { selectedUid: null, selectedUids: [] }
+        : { selectedUid: uid, selectedUids: [uid] },
+    ),
+
+  toggleSelect: (uid) =>
+    set((s) => {
+      const has = s.selectedUids.includes(uid);
+      const selectedUids = has
+        ? s.selectedUids.filter((u) => u !== uid)
+        : [...s.selectedUids, uid];
+      const selectedUid = has
+        ? s.selectedUid === uid
+          ? (selectedUids[selectedUids.length - 1] ?? null)
+          : s.selectedUid
+        : uid;
+      return { selectedUids, selectedUid };
+    }),
 
   setActivePort: (uid, portId) => {
     const s = get();
@@ -227,7 +254,8 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
 
   clearActivePort: () => set({ activePort: null }),
 
-  clearSelection: () => set({ selectedUid: null, activePort: null }),
+  clearSelection: () =>
+    set({ selectedUid: null, selectedUids: [], activePort: null, contextMenu: null }),
 
   setCompatOnly: (v) => set({ compatOnly: v }),
 
@@ -235,12 +263,17 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
   // per 0.25 in move would flood the stack.
   nudgeSelected: (dx, dy, dz) => {
     const s = get();
-    const sel = s.placed.find((p) => p.uid === s.selectedUid);
-    if (!sel || sel.connections.length > 0) return; // connected parts stay snapped
+    const targets = new Set(
+      s.selectedUids.length > 0 ? s.selectedUids : s.selectedUid ? [s.selectedUid] : [],
+    );
+    if (targets.size === 0) return;
     set({
       placed: s.placed.map((p) =>
-        p.uid === sel.uid
-          ? { ...p, position: [p.position[0] + dx, p.position[1] + dy, p.position[2] + dz] }
+        targets.has(p.uid) && p.connections.length === 0
+          ? {
+              ...p,
+              position: [p.position[0] + dx, p.position[1] + dy, p.position[2] + dz],
+            }
           : p,
       ),
     });
@@ -248,38 +281,71 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
 
   rotateSelected: (axis) => {
     const s = get();
-    const sel = s.placed.find((p) => p.uid === s.selectedUid);
-    if (!sel || sel.connections.length > 0) return;
-    const q = new THREE.Quaternion(...sel.quaternion);
+    const targets = new Set(
+      s.selectedUids.length > 0 ? s.selectedUids : s.selectedUid ? [s.selectedUid] : [],
+    );
+    if (targets.size === 0) return;
     const dq = new THREE.Quaternion().setFromAxisAngle(
       new THREE.Vector3(axis === "x" ? 1 : 0, axis === "y" ? 1 : 0, axis === "z" ? 1 : 0),
       Math.PI / 2,
     );
-    q.premultiply(dq);
-    set({
-      ...hist(s),
-      placed: s.placed.map((p) =>
-        p.uid === sel.uid ? { ...p, quaternion: [q.x, q.y, q.z, q.w] } : p,
-      ),
+    let changed = false;
+    const placed = s.placed.map((p) => {
+      if (!targets.has(p.uid) || p.connections.length > 0) return p;
+      const q = new THREE.Quaternion(...p.quaternion);
+      q.premultiply(dq);
+      changed = true;
+      return { ...p, quaternion: [q.x, q.y, q.z, q.w] as Quat };
     });
+    if (changed) set({ ...hist(s), placed });
   },
 
   deleteSelected: () => {
-    const sel = get().selectedUid;
-    if (!sel) return;
+    const s0 = get();
+    const targets = new Set(
+      s0.selectedUids.length > 0 ? s0.selectedUids : s0.selectedUid ? [s0.selectedUid] : [],
+    );
+    if (targets.size === 0) return;
     set((s) => ({
       ...hist(s),
       placed: s.placed
-        .filter((p) => p.uid !== sel)
+        .filter((p) => !targets.has(p.uid))
         .map((p) =>
-          p.connections.some((c) => c.otherUid === sel)
-            ? { ...p, connections: p.connections.filter((c) => c.otherUid !== sel) }
+          p.connections.some((c) => targets.has(c.otherUid))
+            ? { ...p, connections: p.connections.filter((c) => !targets.has(c.otherUid)) }
             : p,
         ),
       selectedUid: null,
-      activePort: s.activePort?.uid === sel ? null : s.activePort,
+      selectedUids: [],
+      activePort: s.activePort && targets.has(s.activePort.uid) ? null : s.activePort,
     }));
   },
+
+  disconnectAll: (uid) =>
+    set((s) => {
+      const part = s.placed.find((p) => p.uid === uid);
+      if (!part || part.connections.length === 0) return {};
+      const peers = part.connections.map((c) => ({ uid: c.otherUid, portId: c.otherPortId }));
+      return {
+        ...hist(s),
+        placed: s.placed.map((p) => {
+          if (p.uid === uid) return { ...p, connections: [] };
+          const dropPorts = peers.filter((r) => r.uid === p.uid).map((r) => r.portId);
+          if (dropPorts.length === 0) return p;
+          return {
+            ...p,
+            connections: p.connections.filter(
+              (c) => !(c.otherUid === uid && dropPorts.includes(c.portId)),
+            ),
+          };
+        }),
+        activePort: s.activePort?.uid === uid ? null : s.activePort,
+      };
+    }),
+
+  openContextMenu: (x, y, uid) => set({ contextMenu: { x, y, uid } }),
+
+  closeContextMenu: () => set({ contextMenu: null }),
 
   disconnect: (uid, portId) => {
     set((s) => {
@@ -319,20 +385,23 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
 
   rotateSelectedBy: (axis, degrees) => {
     const s = get();
-    const sel = s.placed.find((p) => p.uid === s.selectedUid);
-    if (!sel || sel.connections.length > 0) return; // connected parts stay snapped
-    const q = new THREE.Quaternion(...sel.quaternion);
+    const targets = new Set(
+      s.selectedUids.length > 0 ? s.selectedUids : s.selectedUid ? [s.selectedUid] : [],
+    );
+    if (targets.size === 0) return;
     const dq = new THREE.Quaternion().setFromAxisAngle(
       new THREE.Vector3(axis === "x" ? 1 : 0, axis === "y" ? 1 : 0, axis === "z" ? 1 : 0),
       (degrees * Math.PI) / 180,
     );
-    q.premultiply(dq);
-    set({
-      ...hist(s),
-      placed: s.placed.map((p) =>
-        p.uid === sel.uid ? { ...p, quaternion: [q.x, q.y, q.z, q.w] } : p,
-      ),
+    let changed = false;
+    const placed = s.placed.map((p) => {
+      if (!targets.has(p.uid) || p.connections.length > 0) return p;
+      const q = new THREE.Quaternion(...p.quaternion);
+      q.premultiply(dq);
+      changed = true;
+      return { ...p, quaternion: [q.x, q.y, q.z, q.w] as Quat };
     });
+    if (changed) set({ ...hist(s), placed });
   },
 
   setSelectedLength: (len) => {

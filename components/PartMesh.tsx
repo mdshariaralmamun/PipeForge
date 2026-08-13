@@ -614,17 +614,20 @@ export function ShapeBody({ def, mat }: { def: ComponentDef; mat: THREE.Material
 
 export default function PartMesh({ placed }: { placed: PlacedComponent }) {
   const baseDef = getDef(placed.defId);
-  const selected = useAssembly((s) => s.selectedUid === placed.uid);
+  const selected = useAssembly((s) => s.selectedUids.includes(placed.uid));
   const activePort = useAssembly((s) => s.activePort);
   const select = useAssembly((s) => s.select);
+  const toggleSelect = useAssembly((s) => s.toggleSelect);
   const setActivePort = useAssembly((s) => s.setActivePort);
   const setDragging = useAssembly((s) => s.setDragging);
   const moveSelectedTo = useAssembly((s) => s.moveSelectedTo);
   const splitTarget = useAssembly((s) => s.splitTarget);
   const setSplitTarget = useAssembly((s) => s.setSplitTarget);
+  const openContextMenu = useAssembly((s) => s.openContextMenu);
 
   const dragPlane = useRef(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0));
   const draggingRef = useRef(false);
+  const menuStart = useRef<{ x: number; y: number } | null>(null);
 
   if (!baseDef) return null;
 
@@ -643,11 +646,20 @@ export default function PartMesh({ placed }: { placed: PlacedComponent }) {
 
   const onBodyClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
-    select(placed.uid);
+    // Ctrl/Cmd+click toggles multi-selection (CAD style).
+    if (e.nativeEvent.ctrlKey || e.nativeEvent.metaKey) toggleSelect(placed.uid);
+    else select(placed.uid);
   };
 
   // Mouse-drag move on the horizontal plane through the part (grid-snapped).
   const onPointerDown = (e: ThreeEvent<PointerEvent>) => {
+    if (e.button === 2) {
+      // Right button: remember the position for the context menu; let
+      // OrbitControls keep right-drag pan.
+      menuStart.current = { x: e.clientX, y: e.clientY };
+      return;
+    }
+    if (e.button !== 0) return;
     if (connected || useAssembly.getState().sketchMode) return;
     e.stopPropagation();
     select(placed.uid);
@@ -667,6 +679,16 @@ export default function PartMesh({ placed }: { placed: PlacedComponent }) {
   };
 
   const onPointerUp = (e: ThreeEvent<PointerEvent>) => {
+    if (e.button === 2) {
+      const start = menuStart.current;
+      menuStart.current = null;
+      // Right-click (not a pan drag): open the command menu on the part.
+      if (start && Math.abs(e.clientX - start.x) + Math.abs(e.clientY - start.y) < 6) {
+        e.stopPropagation();
+        openContextMenu(e.clientX, e.clientY, placed.uid);
+      }
+      return;
+    }
     if (!draggingRef.current) return;
     draggingRef.current = false;
     setDragging(false);

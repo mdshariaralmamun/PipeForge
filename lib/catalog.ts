@@ -805,6 +805,61 @@ function flangeAdapter(pn: string, material: string, odMm: number): ComponentDef
   };
 }
 
+// --- Transition parts (cross-system joints) -----------------------------------
+
+// Socket-weld x compression transition union: Dockweiler weld tube joins
+// Swagelok-style compression fittings through this real-world adapter.
+function transitionUnion(
+  partNumber: string,
+  brand: Brand,
+  size: string,
+  t: number,
+): ComponentDef {
+  const len = 1.35 + 1.5 * t;
+  const { bodyDia, nutDia, nutLen } = tubeDims(t);
+  return {
+    id: slug(partNumber),
+    partNumber,
+    brand,
+    family: "tube",
+    shape: "union",
+    description: `Transition union, ${size} in socket weld x ${size} in tube compression`,
+    material: MATERIAL,
+    sizeLabel: `${size} in`,
+    dims: { len, bodyDia, nutDia, nutLen },
+    ports: [
+      port("p1", [-len / 2, 0, 0], [-1, 0, 0], "weld", size),
+      port("p2", [len / 2, 0, 0], [1, 0, 0], "tube-comp", size),
+    ],
+  };
+}
+
+// SS loose-flange stub adapter: weld end x flanged end. Flange size matches the
+// plastic flange adapters (DN), so plastic systems join SS through a flange pair.
+function ssFlangeAdapter(
+  partNumber: string,
+  weldSize: string,
+  t: number,
+  flangeSize: string,
+): ComponentDef {
+  const len = 2.0 * t + 0.7;
+  return {
+    id: slug(partNumber),
+    partNumber,
+    brand: "Generic",
+    family: "uhp",
+    shape: "sleeve",
+    description: `SS flange adapter, ${weldSize} in weld x DN${flangeSize.replace("mm", "")} flanged (transition joint)`,
+    material: MATERIAL,
+    sizeLabel: `${weldSize} in x ${flangeSize}`,
+    dims: { len, dia: t, bandDia: t * 2.4 + 0.25, bandLen: 0.2 },
+    ports: [
+      port("p1", [-len / 2, 0, 0], [-1, 0, 0], "weld", weldSize),
+      port("p2", [len / 2, 0, 0], [1, 0, 0], "flange", flangeSize),
+    ],
+  };
+}
+
 // --- catalog ----------------------------------------------------------------
 
 export const CATALOG: ComponentDef[] = [
@@ -1028,6 +1083,15 @@ export const CATALOG: ComponentDef[] = [
   uprightDevice("GP-RV-4N", "Relief valve, 1/4 in MNPT inlet", "1/4 in NPT", "npt-m", "1/4", { stemDia: 0.3, stemLen: 0.3, bodyDia: 0.7, bodyH: 1.0 }),
   checkValve("GP-CV-4", "1/4", 0.25),
   uprightDevice("GP-PT-4", "Pressure transducer, 1/4 in face-seal male", "1/4 in VCR", "fs-m", "1/4", { stemDia: 0.25, stemLen: 0.25, bodyDia: 0.55, bodyH: 0.9 }),
+
+  // -- Transition parts (cross-system joints) --
+  // Socket-weld x compression transition union: Dockweiler weld tube <-> Swagelok fittings
+  transitionUnion("SS-4-TSW-6", "Swagelok", "1/4", 0.25),
+  transitionUnion("SS-6-TSW-6", "Swagelok", "3/8", 0.375),
+  transitionUnion("SS-8-TSW-6", "Swagelok", "1/2", 0.5),
+  // SS loose-flange adapters (DN-matched to the plastic flange adapters)
+  ssFlangeAdapter("SS-FLG-25W", "1/2", 0.5, "25mm"),
+  ssFlangeAdapter("SS-FLG-50W", "1/2", 0.5, "50mm"),
 
   // -- PP-H system (socket fusion) --
   plasticPipe("PPH-PIPE-d25", "PP-H", "plastic", 25),
