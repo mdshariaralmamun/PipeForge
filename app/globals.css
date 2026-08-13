@@ -28,7 +28,6 @@ body {
 [data-theme="light"] .bg-neutral-950\/80 { background-color: rgb(255 255 255 / 0.8); }
 [data-theme="light"] .bg-neutral-950\/95 { background-color: rgb(255 255 255 / 0.92); }
 [data-theme="light"] .bg-black\/50 { background-color: rgb(15 18 22 / 0.25); }
-[data-theme="light"] .bg-\[#101318\] { background-color: #dde3ea; }
 
 [data-theme="light"] .border-neutral-800 { border-color: #d4d4d8; }
 [data-theme="light"] .border-neutral-800\/60 { border-color: rgb(212 212 216 / 0.7); }
