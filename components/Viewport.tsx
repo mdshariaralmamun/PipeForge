@@ -45,6 +45,7 @@ export default function Viewport() {
   const sketchMode = useAssembly((s) => s.sketchMode);
   const sketchPoints = useAssembly((s) => s.sketchPoints);
   const addSketchPoint = useAssembly((s) => s.addSketchPoint);
+  const theme = useAssembly((s) => s.theme);
 
   return (
     <Canvas
@@ -56,7 +57,7 @@ export default function Viewport() {
         if (!sketchMode) clearSelection();
       }}
     >
-      <color attach="background" args={["#0b0e12"]} />
+      <color attach="background" args={[theme === "light" ? "#dde3ea" : "#0b0e12"]} />
 
       {viewMode === "3d" ? (
         <PerspectiveCamera makeDefault position={[7, 5, 9]} fov={45} near={0.1} far={500} />
@@ -91,10 +92,10 @@ export default function Viewport() {
         infiniteGrid
         cellSize={0.5}
         cellThickness={0.6}
-        cellColor="#262b32"
+        cellColor={theme === "light" ? "#c3ccd6" : "#262b32"}
         sectionSize={2.5}
         sectionThickness={1.1}
-        sectionColor="#3d4650"
+        sectionColor={theme === "light" ? "#9aa7b5" : "#3d4650"}
         fadeDistance={50}
         fadeStrength={1.2}
       />

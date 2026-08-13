@@ -35,9 +35,16 @@ export default function AppShell() {
   const panelLeft = useAssembly((s) => s.panelLeft);
   const panelRight = useAssembly((s) => s.panelRight);
   const closePanels = useAssembly((s) => s.closePanels);
+  const theme = useAssembly((s) => s.theme);
 
   // Hydrate from localStorage once, then autosave on every change (debounced).
   useEffect(() => {
+    try {
+      const t = localStorage.getItem("pipeforge-theme");
+      if (t === "light" || t === "dark") useAssembly.setState({ theme: t });
+    } catch {
+      // storage unavailable
+    }
     try {
       const defs = parseCustomDefs(localStorage.getItem(CUSTOM_STORAGE_KEY) ?? "");
       for (const def of defs) registerCustomDef(def);
@@ -207,7 +214,10 @@ export default function AppShell() {
   }, []);
 
   return (
-    <div className="flex h-screen w-full flex-col overflow-hidden bg-neutral-950 text-neutral-200">
+    <div
+      data-theme={theme}
+      className="flex h-screen w-full flex-col overflow-hidden bg-neutral-950 text-neutral-200"
+    >
       <Toolbar />
       {notice && (
         <div className="flex shrink-0 items-center gap-3 border-b border-amber-900/60 bg-amber-950/70 px-4 py-1.5 text-xs text-amber-200">

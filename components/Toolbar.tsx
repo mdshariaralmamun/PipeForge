@@ -41,6 +41,8 @@ export default function Toolbar() {
   const toggleLeftPanel = useAssembly((s) => s.toggleLeftPanel);
   const toggleRightPanel = useAssembly((s) => s.toggleRightPanel);
   const setCloudOpen = useAssembly((s) => s.setCloudOpen);
+  const theme = useAssembly((s) => s.theme);
+  const toggleTheme = useAssembly((s) => s.toggleTheme);
   const { configured, user, role } = useSession();
   const router = useRouter();
 
@@ -209,6 +211,13 @@ export default function Toolbar() {
         ⚙ Props
       </button>
       <div className="flex-1" />
+      <button
+        onClick={toggleTheme}
+        className={btnCls}
+        title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+      >
+        {theme === "dark" ? "☀ Light" : "☾ Dark"}
+      </button>
       <a
         href="/help"
         target="_blank"

@@ -3,19 +3,22 @@
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { getDef } from "@/lib/catalog";
+import { useAssembly } from "@/lib/assembly";
 import { ShapeBody, steel } from "./PartMesh";
 
 // Live rendered preview of a catalog part — shows how the component actually
 // looks (same procedural model as the 3D viewport), slowly auto-rotating.
 export default function PartPreview({ defId }: { defId: string | null }) {
   const def = defId ? getDef(defId) : undefined;
+  const theme = useAssembly((s) => s.theme);
+  const previewBg = theme === "light" ? "#dde3ea" : "#101318";
 
   return (
     <div className="shrink-0 border-b border-neutral-800">
-      <div className="h-36 w-full bg-[#101318]">
+      <div className="h-36 w-full" style={{ background: previewBg }}>
         {def ? (
           <Canvas camera={{ position: [2.4, 1.7, 2.4], fov: 40 }}>
-            <color attach="background" args={["#101318"]} />
+            <color attach="background" args={[previewBg]} />
             <ambientLight intensity={0.6} />
             <hemisphereLight args={["#93a4b8", "#1a1d21", 0.4]} />
             <directionalLight position={[4, 6, 3]} intensity={1.2} />

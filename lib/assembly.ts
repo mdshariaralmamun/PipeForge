@@ -48,6 +48,7 @@ export interface AssemblyState {
   cloudId: string | null; // currently open cloud project
   cloudName: string | null;
   systemDefs: ComponentDef[]; // approved shared-catalog parts (read-only)
+  theme: "dark" | "light";
 
   placePart: (defId: string) => void;
   select: (uid: string | null) => void;
@@ -79,6 +80,7 @@ export interface AssemblyState {
   setCloudOpen: (v: boolean) => void;
   setCloudRef: (id: string | null, name: string | null) => void;
   setSystemDefs: (defs: ComponentDef[]) => void;
+  toggleTheme: () => void;
   say: (msg: string) => void;
   undo: () => void;
   redo: () => void;
@@ -121,6 +123,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
   cloudId: null,
   cloudName: null,
   systemDefs: [],
+  theme: "dark",
 
   placePart: (defId) => {
     const def = getDef(defId);
@@ -564,6 +567,17 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
   setCloudRef: (id, name) => set({ cloudId: id, cloudName: name }),
 
   setSystemDefs: (defs) => set({ systemDefs: defs }),
+
+  toggleTheme: () =>
+    set((s) => {
+      const theme = s.theme === "dark" ? "light" : "dark";
+      try {
+        localStorage.setItem("pipeforge-theme", theme);
+      } catch {
+        // storage unavailable
+      }
+      return { theme };
+    }),
 
   say: (msg) => set({ notice: msg }),
 
