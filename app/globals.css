@@ -74,3 +74,16 @@ body {
 [data-theme="light"] .text-purple-300 { color: #7e22ce; }
 [data-theme="light"] .bg-purple-950\/50 { background-color: rgb(243 232 255 / 0.7); }
 [data-theme="light"] .border-purple-700 { border-color: #c084fc; }
+
+/* Hover-state overrides (the plain-class rules above don't cover hover: variants) */
+[data-theme="light"] .hover\:bg-neutral-800:hover { background-color: #d8dbe0; }
+[data-theme="light"] .hover\:bg-neutral-700:hover { background-color: #c9cdd4; }
+[data-theme="light"] .hover\:border-neutral-700:hover { border-color: #a1a1aa; }
+[data-theme="light"] .hover\:border-neutral-500:hover { border-color: #8e8e96; }
+[data-theme="light"] .hover\:text-neutral-300:hover { color: #3f3f46; }
+[data-theme="light"] .hover\:text-neutral-200:hover { color: #18181b; }
+[data-theme="light"] .hover\:text-amber-300:hover { color: #92400e; }
+[data-theme="light"] .hover\:border-amber-500:hover { border-color: #d97706; }
+[data-theme="light"] .hover\:border-cyan-500:hover { border-color: #0891b2; }
+[data-theme="light"] .hover\:border-green-500:hover { border-color: #16a34a; }
+[data-theme="light"] .hover\:border-red-600:hover { border-color: #dc2626; }
