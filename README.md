@@ -22,7 +22,9 @@ Installers are produced by the **Desktop installers** GitHub Actions workflow
 - Stretchable tube/pipe runs, auto weld-joint marking, bend formulas
 - Dockable panels, dark/light theme, keyboard shortcuts, undo/redo
 - Schematic + dimensioned iso sheet (SVG), MTO with order notes (CSV)
-- AI designer (bring-your-own OpenAI-compatible key, works with Ollama)
+- AI chat designer (bring-your-own OpenAI-compatible key, works with Ollama):
+  conversational copilot that explains the project and modifies it — adds parts,
+  routes 3D tube runs (horizontal + vertical), removes parts, clears, undoes
 - Accounts, per-user cloud projects, shared admin-approved catalog (Supabase)
 
 ## Develop

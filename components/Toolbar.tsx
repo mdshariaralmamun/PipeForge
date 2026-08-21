@@ -163,7 +163,7 @@ export default function Toolbar() {
       <button
         onClick={() => setAiOpen(true)}
         className={`${btnCls} border-purple-700 bg-purple-950/50 text-purple-300`}
-        title="AI designer: describe the system in words, AI builds it (bring your own API key)"
+        title="AI chat: describe the system in words, AI builds and fixes it (bring your own API key)"
       >
         AI
       </button>

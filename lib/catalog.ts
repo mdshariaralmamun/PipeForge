@@ -1077,6 +1077,36 @@ export const CATALOG: ComponentDef[] = [
   gceRegulator("EMD 300-06", "Point-of-use regulator, 0-6 bar", "1/4", "fs-m", "fs-m"),
   gceRegulator("D1G", "Dome-loaded high-flow regulator", "1/2", "npt-f", "npt-f", 1.6),
   diaphragmValve("MVA 500 G", "GCE Druva", "1/4"),
+  {
+    id: slug("BMD 500-14 2X1"),
+    partNumber: "BMD 500-14 2X1",
+    brand: "GCE Druva",
+    family: "regulator",
+    shape: "block",
+    description:
+      "2-cylinder auto-changeover manifold (semi-automatic), 230 bar in / 0-14 bar out, with purge/vent port",
+    material: MATERIAL,
+    sizeLabel: "2x1 cylinder, 1/2 in out",
+    dims: { blockW: 6, blockH: 2.5, blockD: 2, stubLen: 0.6, stubDia: 0.5 },
+    ports: [
+      port("p1", [-3, 0, 0], [-1, 0, 0], "npt-f", "1/4"), // cylinder A pigtail
+      port("p2", [3, 0, 0], [1, 0, 0], "npt-f", "1/4"), // cylinder B pigtail
+      port("p3", [0, 0, 1], [0, 0, 1], "tube-comp", "1/2"), // process outlet to main line
+      port("p4", [0, 0, -1], [0, 0, -1], "npt-f", "1/4"), // purge / vent
+    ],
+  },
+  {
+    id: slug("GCE-ALM-1"),
+    partNumber: "GCE-ALM-1",
+    brand: "GCE Druva",
+    family: "instrument",
+    shape: "block",
+    description: "Alarm box, low/high pressure switch + beacon, 1/4 in FNPT process input",
+    material: MATERIAL,
+    sizeLabel: "1/4 in FNPT",
+    dims: { blockW: 3, blockH: 4, blockD: 1.5, stubLen: 0.5, stubDia: 0.4 },
+    ports: [port("p1", [0, -2, 0], [0, -1, 0], "npt-f", "1/4")],
+  },
 
   // -- POU stick hardware (generic UHP) --
   diaphragmValve("UHP-DV-4", "Generic", "1/4"),

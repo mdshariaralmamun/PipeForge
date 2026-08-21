@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import dynamic from "next/dynamic";
-import AiPanel from "./AiPanel";
+import AiChatPanel from "./AiChatPanel";
 import CatalogPanel from "./CatalogPanel";
 import CloudPanel from "./CloudPanel";
 import ContextMenu from "./ContextMenu";
@@ -25,6 +25,7 @@ const PANELS: PanelName[] = ["catalog", "properties", "mto"];
 function renderPanel(p: PanelName) {
   if (p === "catalog") return <CatalogPanel key="catalog" />;
   if (p === "properties") return <PropertiesPanel key="properties" />;
+  if (p === "ai") return <AiChatPanel key="ai" />;
   return <MtoPanel key="mto" />;
 }
 
@@ -46,9 +47,12 @@ export default function AppShell() {
   const closePanels = useAssembly((s) => s.closePanels);
   const theme = useAssembly((s) => s.theme);
   const panelZones = useAssembly((s) => s.panelZones);
-  const leftPanels = PANELS.filter((p) => panelZones[p] === "left");
-  const rightPanels = PANELS.filter((p) => panelZones[p] === "right");
-  const bottomPanels = PANELS.filter((p) => panelZones[p] === "bottom");
+  const aiOpen = useAssembly((s) => s.aiOpen);
+  // The AI chat palette only renders while open; the rest are always parked.
+  const visible = aiOpen ? [...PANELS, "ai" as PanelName] : PANELS;
+  const leftPanels = visible.filter((p) => panelZones[p] === "left");
+  const rightPanels = visible.filter((p) => panelZones[p] === "right");
+  const bottomPanels = visible.filter((p) => panelZones[p] === "bottom");
 
   // Hydrate from localStorage once, then autosave on every change (debounced).
   useEffect(() => {
@@ -295,7 +299,6 @@ export default function AppShell() {
         )}
       </div>
       <DrawingPanel />
-      <AiPanel />
       <CloudPanel />
       <ContextMenu />
     </div>

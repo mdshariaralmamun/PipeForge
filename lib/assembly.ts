@@ -4,6 +4,7 @@ import { allDefs, effPorts, getDef, registerCustomDef } from "./catalog";
 import { END_TYPE_LABEL, findAdapters, portsCompatible } from "./compat";
 import { CUSTOM_STORAGE_KEY, serializeCustomDefs } from "./custom";
 import { anyOverlap } from "./geom";
+import { buildRunParts } from "./run";
 import type {
   ActivePortRef,
   ComponentDef,
@@ -26,7 +27,7 @@ const HISTORY_LIMIT = 50;
 
 // Panel docking: which screen zone each UI panel lives in.
 export type PanelZone = "left" | "right" | "bottom";
-export type PanelName = "catalog" | "properties" | "mto";
+export type PanelName = "catalog" | "properties" | "mto" | "ai";
 
 export interface AssemblyState {
   placed: PlacedComponent[];
@@ -83,6 +84,7 @@ export interface AssemblyState {
   cancelSketch: () => void;
   setSplitTarget: (uid: string | null) => void;
   insertInMiddle: (defId: string) => void;
+  placeRun: (pts: Vec3[], tubeDefId: string, elbowDefId: string) => void;
   zoomFit: () => void;
   setAiOpen: (v: boolean) => void;
   toggleLeftPanel: () => void;
@@ -97,6 +99,7 @@ export interface AssemblyState {
   undo: () => void;
   redo: () => void;
   deleteSelected: () => void;
+  deleteUids: (uids: string[]) => void;
   disconnect: (uid: string, portId: string) => void;
   setViewMode: (v: ViewMode) => void;
   setDrawing: (d: "schematic" | "iso" | null) => void;
@@ -138,7 +141,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
   cloudName: null,
   systemDefs: [],
   theme: "dark",
-  panelZones: { catalog: "left", properties: "right", mto: "bottom" },
+  panelZones: { catalog: "left", properties: "right", mto: "bottom", ai: "right" },
 
   placePart: (defId) => {
     const def = getDef(defId);
@@ -302,24 +305,29 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
 
   deleteSelected: () => {
     const s0 = get();
-    const targets = new Set(
-      s0.selectedUids.length > 0 ? s0.selectedUids : s0.selectedUid ? [s0.selectedUid] : [],
-    );
-    if (targets.size === 0) return;
-    set((s) => ({
-      ...hist(s),
-      placed: s.placed
-        .filter((p) => !targets.has(p.uid))
-        .map((p) =>
-          p.connections.some((c) => targets.has(c.otherUid))
-            ? { ...p, connections: p.connections.filter((c) => !targets.has(c.otherUid)) }
-            : p,
-        ),
-      selectedUid: null,
-      selectedUids: [],
-      activePort: s.activePort && targets.has(s.activePort.uid) ? null : s.activePort,
-    }));
+    const targets =
+      s0.selectedUids.length > 0 ? s0.selectedUids : s0.selectedUid ? [s0.selectedUid] : [];
+    if (targets.length > 0) get().deleteUids(targets);
   },
+
+  deleteUids: (uids) =>
+    set((s) => {
+      const targets = new Set(uids);
+      if (targets.size === 0) return {};
+      return {
+        ...hist(s),
+        placed: s.placed
+          .filter((p) => !targets.has(p.uid))
+          .map((p) =>
+            p.connections.some((c) => targets.has(c.otherUid))
+              ? { ...p, connections: p.connections.filter((c) => !targets.has(c.otherUid)) }
+              : p,
+          ),
+        selectedUid: null,
+        selectedUids: [],
+        activePort: s.activePort && targets.has(s.activePort.uid) ? null : s.activePort,
+      };
+    }),
 
   disconnectAll: (uid) =>
     set((s) => {
@@ -544,89 +552,34 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
       set({ notice: "Sketch needs the Dockweiler 1/4 in ULTRON tube + elbow in the catalog." });
       return;
     }
-    const leg = elbowDef.dims.leg;
-    const X = new THREE.Vector3(1, 0, 0);
-    const n = pts.length;
-
-    // Which interior points get an elbow (direction change ~90 deg)?
-    const elbowAt = pts.map((_, i) => {
-      if (i === 0 || i === n - 1) return false;
-      const dIn = new THREE.Vector3(...pts[i])
-        .sub(new THREE.Vector3(...pts[i - 1]))
-        .normalize();
-      const dOut = new THREE.Vector3(...pts[i + 1])
-        .sub(new THREE.Vector3(...pts[i]))
-        .normalize();
-      return Math.abs(dIn.dot(dOut)) < 0.2;
-    });
-
-    const newParts: PlacedComponent[] = [];
-    const link = (a: PlacedComponent, aPort: string, b: PlacedComponent, bPort: string) => {
-      a.connections.push({ portId: aPort, otherUid: b.uid, otherPortId: bPort });
-      b.connections.push({ portId: bPort, otherUid: a.uid, otherPortId: aPort });
-    };
-
-    let prev: PlacedComponent | null = null; // part whose free "p2" faces the next segment
-    for (let i = 0; i < n - 1; i++) {
-      const a = new THREE.Vector3(...pts[i]);
-      const b = new THREE.Vector3(...pts[i + 1]);
-      const dir = b.clone().sub(a).normalize();
-      const startOff = i > 0 && elbowAt[i] ? leg : 0;
-      const endOff = elbowAt[i + 1] ? leg : 0;
-      const len = a.distanceTo(b) - startOff - endOff;
-      if (len < 0.5) continue;
-      const mid = a.clone().addScaledVector(dir, startOff + len / 2);
-      const q = new THREE.Quaternion().setFromUnitVectors(X, dir);
-      const tube: PlacedComponent = {
-        uid: newUid(),
-        defId: tubeDef.id,
-        position: [mid.x, mid.y, mid.z],
-        quaternion: [q.x, q.y, q.z, q.w],
-        connections: [],
-        lengthOverride: Math.min(36, len),
-      };
-      newParts.push(tube);
-
-      if (i > 0 && prev) {
-        if (elbowAt[i]) {
-          // Corner: insert elbow. Local p1 = +X outward, p2 = +Y outward.
-          const dIn = new THREE.Vector3(...pts[i])
-            .sub(new THREE.Vector3(...pts[i - 1]))
-            .normalize();
-          const e1 = dIn.clone().negate();
-          const e3 = new THREE.Vector3().crossVectors(e1, dir).normalize();
-          const e2 = new THREE.Vector3().crossVectors(e3, e1).normalize();
-          const qe = new THREE.Quaternion().setFromRotationMatrix(
-            new THREE.Matrix4().makeBasis(e1, e2, e3),
-          );
-          const corner = new THREE.Vector3(...pts[i]);
-          const elbow: PlacedComponent = {
-            uid: newUid(),
-            defId: elbowDef.id,
-            position: [corner.x, corner.y, corner.z],
-            quaternion: [qe.x, qe.y, qe.z, qe.w],
-            connections: [],
-          };
-          newParts.push(elbow);
-          link(prev, "p2", elbow, "p1");
-          link(elbow, "p2", tube, "p1");
-        } else {
-          link(prev, "p2", tube, "p1");
-        }
-      }
-      prev = tube;
-    }
-
+    const newParts = buildRunParts(pts, tubeDef, elbowDef, newUid);
     if (newParts.length === 0) return;
+    const lastTube = [...newParts].reverse().find((p) => p.defId === tubeDef.id);
     set({
       ...hist(s),
       placed: [...s.placed, ...newParts],
-      selectedUid: prev?.uid ?? null,
+      selectedUid: lastTube?.uid ?? null,
       notice: `Run drafted: ${newParts.length} parts (1/4 in ULTRON tube, orbital-weld joints).`,
     });
   },
 
   setSplitTarget: (uid) => set({ splitTarget: uid, activePort: null }),
+
+  // AI chat "route" action: drop a pre-computed 3D tube run in one undo step.
+  placeRun: (pts, tubeDefId, elbowDefId) => {
+    const s = get();
+    const tubeDef = getDef(tubeDefId);
+    const elbowDef = getDef(elbowDefId);
+    if (!tubeDef || !elbowDef || pts.length < 2) return;
+    const newParts = buildRunParts(pts, tubeDef, elbowDef, newUid);
+    if (newParts.length === 0) return;
+    set({
+      ...hist(s),
+      placed: [...s.placed, ...newParts],
+      selectedUid: newParts[newParts.length - 1].uid,
+      notice: null,
+    });
+  },
 
   zoomFit: () => set((s) => ({ fitNonce: s.fitNonce + 1 })),
 
