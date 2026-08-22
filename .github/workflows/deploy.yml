@@ -24,5 +24,7 @@ jobs:
             set -e
             cd /opt/pipeforge
             git pull --ff-only
+            export APP_VERSION="$(node -p "require('./package.json').version") (build $(git rev-list --count HEAD) · $(git rev-parse --short HEAD))"
+            export APP_BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             docker compose up -d --build web
             docker image prune -f

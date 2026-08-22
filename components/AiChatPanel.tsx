@@ -13,10 +13,17 @@ const btnCls =
 // Provider presets: picking one fills endpoint + model; the key is preserved.
 const PRESETS: { name: string; baseUrl: string; model: string }[] = [
   { name: "Ollama (local)", baseUrl: "http://localhost:11434/v1", model: "gpt-oss:20b" },
-  { name: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1", model: "" },
+  { name: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1", model: "openai/gpt-4o-mini" },
   { name: "OpenAI", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini" },
   { name: "Groq", baseUrl: "https://api.groq.com/openai/v1", model: "llama-3.3-70b-versatile" },
 ];
+
+const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
+
+interface OrModel {
+  id: string; // valid model ID, e.g. google/gemma-3-27b-it
+  name: string; // display name, e.g. "Gemma 3 27B Instruct"
+}
 
 // AI chat palette: continuous conversation that can also modify the project
 // (BYOK — the key stays in this browser only).
@@ -34,6 +41,16 @@ export default function AiChatPanel() {
   const [draft, setDraft] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
 
+  // OpenRouter model picker state
+  const [orModels, setOrModels] = useState<OrModel[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelFilter, setModelFilter] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const filterRef = useRef<HTMLInputElement>(null);
+
+  const isOpenRouter = settings.baseUrl.trim().replace(/\/+$/, "") === OPENROUTER_BASE;
+
   useEffect(() => hydrate(), [hydrate]);
 
   // Keep the latest message in view.
@@ -42,6 +59,50 @@ export default function AiChatPanel() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, busy]);
 
+  // Fetch the real model list from OpenRouter when that provider is selected.
+  const loadOrModels = async () => {
+    setModelsLoading(true);
+    try {
+      const res = await fetch(`${OPENROUTER_BASE}/models`);
+      const data = (await res.json()) as { data?: { id: string; name?: string }[] };
+      const models = (data.data ?? [])
+        .map((m) => ({ id: m.id, name: m.name || m.id }))
+        .sort((a, b) => a.id.localeCompare(b.id));
+      setOrModels(models);
+    } catch {
+      setOrModels([]);
+    } finally {
+      setModelsLoading(false);
+    }
+  };
+
+  // Load models on mount when OpenRouter is the active provider.
+  useEffect(() => {
+    if (isOpenRouter && orModels.length === 0 && !modelsLoading) void loadOrModels();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpenRouter]);
+
+  // Auto-correct a saved display name (e.g. "Gemma 4 26B A4B") to the real
+  // model ID (e.g. "google/gemma-3-27b-it") once the model list arrives.
+  useEffect(() => {
+    if (orModels.length === 0) return;
+    const saved = settings.model.trim();
+    if (!saved) return;
+    if (orModels.some((m) => m.id === saved)) return; // already a valid ID
+    const byName = orModels.find((m) => m.name.toLowerCase() === saved.toLowerCase());
+    if (byName) set({ model: byName.id });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orModels]);
+
+  // Close the picker when clicking outside.
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setPickerOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
   const set = (patch: Partial<AiSettings>) =>
     setSettings((s) => {
       const next = { ...s, ...patch };
@@ -49,8 +110,7 @@ export default function AiChatPanel() {
       return next;
     });
 
-  const presetName =
-    PRESETS.find((p) => p.baseUrl === settings.baseUrl)?.name ?? "Custom";
+  const presetName = PRESETS.find((p) => p.baseUrl === settings.baseUrl)?.name ?? "Custom";
 
   const submit = () => {
     const text = draft.trim();
@@ -58,6 +118,12 @@ export default function AiChatPanel() {
     setDraft("");
     void send(text);
   };
+
+  const filtered = modelFilter.trim()
+    ? orModels.filter((m) =>
+        `${m.id} ${m.name}`.toLowerCase().includes(modelFilter.trim().toLowerCase()),
+      )
+    : orModels;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -100,7 +166,10 @@ export default function AiChatPanel() {
               value={presetName}
               onChange={(e) => {
                 const p = PRESETS.find((x) => x.name === e.target.value);
-                if (p) set({ baseUrl: p.baseUrl, model: p.model });
+                if (p) {
+                  set({ baseUrl: p.baseUrl, model: p.model });
+                  if (p.name === "OpenRouter") void loadOrModels();
+                }
               }}
               className={fieldCls}
             >
@@ -132,15 +201,87 @@ export default function AiChatPanel() {
               placeholder="sk-… (empty for Ollama)"
             />
           </label>
-          <label>
+          <div className="relative col-span-1">
             <span className="text-[10px] uppercase tracking-wider text-neutral-500">Model</span>
-            <input
-              value={settings.model}
-              onChange={(e) => set({ model: e.target.value })}
-              className={fieldCls}
-              placeholder="gpt-4o-mini"
-            />
-          </label>
+            <div ref={pickerRef} className="relative">
+              <input
+                value={settings.model}
+                onChange={(e) => set({ model: e.target.value })}
+                className={`${fieldCls} pr-7`}
+                placeholder="gpt-4o-mini"
+                onFocus={() => isOpenRouter && setPickerOpen(true)}
+              />
+              {isOpenRouter && (
+                <button
+                  onClick={() => {
+                    setPickerOpen((v) => !v);
+                    if (!pickerOpen) setTimeout(() => filterRef.current?.focus(), 30);
+                  }}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 rounded px-1 text-xs text-neutral-500 hover:text-amber-300"
+                  title="Pick a model from OpenRouter"
+                >
+                  ▾
+                </button>
+              )}
+              {isOpenRouter && pickerOpen && (
+                <div className="absolute left-0 right-0 top-full z-30 mt-1 flex max-h-56 flex-col overflow-hidden rounded border border-neutral-700 bg-neutral-900 shadow-xl">
+                  <input
+                    ref={filterRef}
+                    value={modelFilter}
+                    onChange={(e) => setModelFilter(e.target.value)}
+                    className="shrink-0 border-b border-neutral-700 bg-neutral-800 px-2 py-1.5 text-xs text-neutral-200 outline-none focus:border-amber-500"
+                    placeholder="Search models… (e.g. gemma, glm, gpt)"
+                  />
+                  <div className="min-h-0 flex-1 overflow-y-auto">
+                    {modelsLoading ? (
+                      <p className="px-2 py-3 text-center text-[11px] text-neutral-500">
+                        Loading models…
+                      </p>
+                    ) : filtered.length === 0 ? (
+                      <p className="px-2 py-3 text-center text-[11px] text-neutral-500">
+                        No models found. Check the endpoint or refresh.
+                      </p>
+                    ) : (
+                      filtered.map((m) => (
+                        <button
+                          key={m.id}
+                          onClick={() => {
+                            set({ model: m.id });
+                            setPickerOpen(false);
+                            setModelFilter("");
+                          }}
+                          className={`block w-full px-2 py-1 text-left hover:bg-neutral-800 ${
+                            settings.model === m.id ? "bg-amber-950/40" : ""
+                          }`}
+                          title={m.name}
+                        >
+                          <span className="block font-mono text-[11px] text-neutral-200">
+                            {m.id}
+                          </span>
+                          <span className="block truncate text-[10px] text-neutral-500">
+                            {m.name}
+                          </span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                  <button
+                    onClick={() => void loadOrModels()}
+                    className="shrink-0 border-t border-neutral-700 px-2 py-1 text-left text-[10px] text-neutral-500 hover:text-amber-300"
+                  >
+                    ↻ Refresh model list
+                  </button>
+                </div>
+              )}
+            </div>
+            {isOpenRouter && (
+              <p className="mt-1 text-[10px] leading-snug text-neutral-600">
+                Use the ▾ picker or type a full model ID like{" "}
+                <code className="text-neutral-500">google/gemma-3-27b-it</code> — display names
+                like "Gemma 4 26B A4B" will not work.
+              </p>
+            )}
+          </div>
           <p className="col-span-2 text-[11px] leading-snug text-neutral-500">
             The key is stored only in this browser (localStorage) and sent only to the endpoint
             above.

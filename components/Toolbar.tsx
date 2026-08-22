@@ -9,6 +9,7 @@ import type { ViewMode } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
 import { useSession } from "@/lib/useSession";
 import { downloadDataUrl, downloadText, timestamp, viewerRef } from "@/lib/viewer";
+import { APP_VERSION, formatBuildTime } from "@/lib/version";
 
 const btnCls =
   "rounded border border-neutral-700 bg-neutral-800 px-2.5 py-1 text-xs text-neutral-200 hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-40";
@@ -100,6 +101,12 @@ export default function Toolbar() {
         </span>
         <span className="ml-2 hidden text-[10px] uppercase tracking-wider text-neutral-500 sm:inline">
           3D piping designer
+        </span>
+        <span
+          className="ml-2 hidden text-[10px] text-neutral-600 lg:inline"
+          title={`Version ${APP_VERSION} — built ${formatBuildTime()}`}
+        >
+          v{APP_VERSION} · updated {formatBuildTime()}
         </span>
       </div>
 

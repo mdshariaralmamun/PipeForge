@@ -10,6 +10,12 @@ RUN npm ci --no-audit --no-fund
 FROM node:22-alpine AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
+# Version stamp shown in the toolbar (no .git in the build context, so the
+# deploy workflow / compose passes these in; see deploy.yml)
+ARG APP_VERSION=""
+ARG APP_BUILD_TIME=""
+ENV APP_VERSION=$APP_VERSION \
+    APP_BUILD_TIME=$APP_BUILD_TIME
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
