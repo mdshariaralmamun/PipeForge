@@ -8,8 +8,10 @@ services:
         APP_VERSION: ${APP_VERSION:-}
         APP_BUILD_TIME: ${APP_BUILD_TIME:-}
     restart: unless-stopped
-    expose:
-      - '3000'
+    # Published on the host so the external Nginx Proxy Manager container can
+    # reach the app (proxy host: pipeforge.shariar.dev -> localhost:3001)
+    ports:
+      - '3001:3000'
 
   # Reverse proxy with automatic HTTPS.
   # Only start this when PipeForge is the ONLY site on the server:
