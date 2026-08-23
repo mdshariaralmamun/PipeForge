@@ -7,13 +7,13 @@ import { useAssembly } from "./assembly";
 import { allDefs } from "./catalog";
 import {
   findDefByPart,
-  loadAiSettings,
   parseAiActions,
   runAiChat,
   summarizeProject,
   type AiAction,
   type ChatMessage,
 } from "./ai";
+import { activeSettings, loadAiProfiles } from "./aiProfiles";
 import type { Vec3 } from "./types";
 
 export interface ChatMsg {
@@ -167,7 +167,7 @@ export const useAiChat = create<AiChatState>()((set, get) => ({
   send: async (text) => {
     const prompt = text.trim();
     if (!prompt || get().busy) return;
-    const settings = loadAiSettings();
+    const settings = activeSettings(loadAiProfiles());
     const local =
       settings.baseUrl.includes("localhost") || settings.baseUrl.includes("127.0.0.1");
     const push = (m: ChatMsg) => {

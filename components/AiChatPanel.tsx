@@ -3,24 +3,24 @@
 import { useEffect, useRef, useState } from "react";
 import { useAssembly } from "@/lib/assembly";
 import { useAiChat } from "@/lib/aiChat";
-import { loadAiSettings, saveAiSettings, type AiSettings } from "@/lib/ai";
+import { DEFAULT_AI_SETTINGS } from "@/lib/ai";
+import {
+  PRESETS,
+  activeSettings,
+  loadAiProfiles,
+  providerFor,
+  saveAiProfiles,
+  testConnection,
+  type AiProfileStore,
+  type TestResult,
+} from "@/lib/aiProfiles";
 
 const fieldCls =
   "w-full rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs text-neutral-200 outline-none focus:border-amber-500";
 const btnCls =
   "rounded border border-neutral-700 bg-neutral-800 px-2.5 py-1 text-xs text-neutral-200 hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-40";
 
-// Provider presets: picking one fills endpoint + model; the key is preserved.
-const PRESETS: { name: string; baseUrl: string; model: string }[] = [
-  { name: "Ollama (local)", baseUrl: "http://localhost:11434/v1", model: "gpt-oss:20b" },
-  { name: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1", model: "openai/gpt-4o-mini" },
-  { name: "OpenAI", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini" },
-  { name: "Groq", baseUrl: "https://api.groq.com/openai/v1", model: "llama-3.3-70b-versatile" },
-];
-
-const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
-
-interface OrModel {
+interface ListedModel {
   id: string; // valid model ID, e.g. google/gemma-3-27b-it
   name: string; // display name, e.g. "Gemma 3 27B Instruct"
 }
@@ -36,20 +36,23 @@ export default function AiChatPanel() {
   const clear = useAiChat((s) => s.clear);
   const hydrate = useAiChat((s) => s.hydrate);
 
-  const [settings, setSettings] = useState<AiSettings>(() => loadAiSettings());
+  const [store, setStore] = useState<AiProfileStore>(() => loadAiProfiles());
   const [showSettings, setShowSettings] = useState(false);
   const [draft, setDraft] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
 
-  // OpenRouter model picker state
-  const [orModels, setOrModels] = useState<OrModel[]>([]);
+  // Model list picker state (works with any endpoint that answers GET /models)
+  const [models, setModels] = useState<ListedModel[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelFilter, setModelFilter] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
 
-  const isOpenRouter = settings.baseUrl.trim().replace(/\/+$/, "") === OPENROUTER_BASE;
+  const [test, setTest] = useState<"idle" | "running" | TestResult>("idle");
+
+  const profile =
+    store.profiles.find((p) => p.id === store.activeId) ?? store.profiles[0];
 
   useEffect(() => hydrate(), [hydrate]);
 
@@ -59,40 +62,51 @@ export default function AiChatPanel() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, busy]);
 
-  // Fetch the real model list from OpenRouter when that provider is selected.
-  const loadOrModels = async () => {
+  // Fetch the model list from the active endpoint (OpenAI shape: GET
+  // {base}/models → {data:[{id,…}]}). OpenRouter answers without a key;
+  // most others need the Bearer header. Failure just leaves the list empty —
+  // the model field stays freeform.
+  const loadModels = async () => {
+    const base = profile.baseUrl.trim().replace(/\/+$/, "");
+    if (!/^https?:\/\//.test(base)) return;
     setModelsLoading(true);
     try {
-      const res = await fetch(`${OPENROUTER_BASE}/models`);
+      const headers: Record<string, string> = {};
+      if (profile.apiKey.trim())
+        headers.Authorization = `Bearer ${profile.apiKey.replace(/\s+/g, "")}`;
+      const res = await fetch(`${base}/models`, { headers });
       const data = (await res.json()) as { data?: { id: string; name?: string }[] };
-      const models = (data.data ?? [])
+      const list = (data.data ?? [])
+        .filter((m) => typeof m.id === "string")
         .map((m) => ({ id: m.id, name: m.name || m.id }))
         .sort((a, b) => a.id.localeCompare(b.id));
-      setOrModels(models);
+      setModels(list);
     } catch {
-      setOrModels([]);
+      setModels([]);
     } finally {
       setModelsLoading(false);
     }
   };
 
-  // Load models on mount when OpenRouter is the active provider.
+  // Load models on mount and when the endpoint changes (debounced — the
+  // endpoint field saves on every keystroke).
   useEffect(() => {
-    if (isOpenRouter && orModels.length === 0 && !modelsLoading) void loadOrModels();
+    const t = setTimeout(() => void loadModels(), 600);
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpenRouter]);
+  }, [profile.baseUrl, profile.id]);
 
   // Auto-correct a saved display name (e.g. "Gemma 4 26B A4B") to the real
   // model ID (e.g. "google/gemma-3-27b-it") once the model list arrives.
   useEffect(() => {
-    if (orModels.length === 0) return;
-    const saved = settings.model.trim();
+    if (models.length === 0) return;
+    const saved = profile.model.trim();
     if (!saved) return;
-    if (orModels.some((m) => m.id === saved)) return; // already a valid ID
-    const byName = orModels.find((m) => m.name.toLowerCase() === saved.toLowerCase());
+    if (models.some((m) => m.id === saved)) return; // already a valid ID
+    const byName = models.find((m) => m.name.toLowerCase() === saved.toLowerCase());
     if (byName) set({ model: byName.id });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orModels]);
+  }, [models]);
 
   // Close the picker when clicking outside.
   useEffect(() => {
@@ -103,14 +117,58 @@ export default function AiChatPanel() {
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
-  const set = (patch: Partial<AiSettings>) =>
-    setSettings((s) => {
-      const next = { ...s, ...patch };
-      saveAiSettings(next);
+  // Patch the active profile and persist immediately (save-on-keystroke).
+  const set = (patch: Partial<Omit<(typeof store.profiles)[number], "id">>) =>
+    setStore((s) => {
+      const next: AiProfileStore = {
+        ...s,
+        profiles: s.profiles.map((p) => (p.id === s.activeId ? { ...p, ...patch } : p)),
+      };
+      saveAiProfiles(next);
       return next;
     });
 
-  const presetName = PRESETS.find((p) => p.baseUrl === settings.baseUrl)?.name ?? "Custom";
+  const selectProfile = (id: string) =>
+    setStore((s) => {
+      const next = { ...s, activeId: id };
+      saveAiProfiles(next);
+      return next;
+    });
+
+  const addProfile = () =>
+    setStore((s) => {
+      const p = {
+        id: Math.random().toString(36).slice(2, 10) + Date.now().toString(36),
+        name: `Profile ${s.profiles.length + 1}`,
+        ...DEFAULT_AI_SETTINGS,
+      };
+      const next = { profiles: [...s.profiles, p], activeId: p.id };
+      saveAiProfiles(next);
+      return next;
+    });
+
+  const renameProfile = () => {
+    const name = window.prompt("Profile name", profile.name)?.trim();
+    if (name) set({ name });
+  };
+
+  const deleteProfile = () => {
+    if (store.profiles.length <= 1) return;
+    if (!window.confirm(`Delete profile "${profile.name}"?`)) return;
+    setStore((s) => {
+      const profiles = s.profiles.filter((p) => p.id !== s.activeId);
+      const next = { profiles, activeId: profiles[0].id };
+      saveAiProfiles(next);
+      return next;
+    });
+  };
+
+  const runTest = async () => {
+    setTest("running");
+    setTest(await testConnection(activeSettings(store)));
+  };
+
+  const presetName = providerFor(profile.baseUrl);
 
   const submit = () => {
     const text = draft.trim();
@@ -120,10 +178,10 @@ export default function AiChatPanel() {
   };
 
   const filtered = modelFilter.trim()
-    ? orModels.filter((m) =>
+    ? models.filter((m) =>
         `${m.id} ${m.name}`.toLowerCase().includes(modelFilter.trim().toLowerCase()),
       )
-    : orModels;
+    : models;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -135,7 +193,7 @@ export default function AiChatPanel() {
           <button
             onClick={() => setShowSettings((v) => !v)}
             className={`text-xs ${showSettings ? "text-amber-300" : "text-neutral-500"} hover:text-amber-300`}
-            title="Provider, API key and model"
+            title="Profiles, provider, API key and model"
           >
             ⚙ Settings
           </button>
@@ -158,6 +216,39 @@ export default function AiChatPanel() {
 
       {showSettings && (
         <div className="grid grid-cols-2 gap-2 border-b border-neutral-800 p-3">
+          <div className="col-span-2">
+            <span className="text-[10px] uppercase tracking-wider text-neutral-500">
+              Profile
+            </span>
+            <div className="flex gap-1">
+              <select
+                value={store.activeId}
+                onChange={(e) => selectProfile(e.target.value)}
+                className={fieldCls}
+                title="Saved provider profiles — switch without re-entering credentials"
+              >
+                {store.profiles.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+              <button onClick={addProfile} className={btnCls} title="Add a new profile">
+                ＋
+              </button>
+              <button onClick={renameProfile} className={btnCls} title="Rename this profile">
+                ✎
+              </button>
+              <button
+                onClick={deleteProfile}
+                disabled={store.profiles.length <= 1}
+                className={btnCls}
+                title="Delete this profile"
+              >
+                🗑
+              </button>
+            </div>
+          </div>
           <label className="col-span-2">
             <span className="text-[10px] uppercase tracking-wider text-neutral-500">
               Provider
@@ -166,10 +257,7 @@ export default function AiChatPanel() {
               value={presetName}
               onChange={(e) => {
                 const p = PRESETS.find((x) => x.name === e.target.value);
-                if (p) {
-                  set({ baseUrl: p.baseUrl, model: p.model });
-                  if (p.name === "OpenRouter") void loadOrModels();
-                }
+                if (p) set({ baseUrl: p.baseUrl, model: p.model });
               }}
               className={fieldCls}
             >
@@ -185,7 +273,7 @@ export default function AiChatPanel() {
               Endpoint (OpenAI-compatible)
             </span>
             <input
-              value={settings.baseUrl}
+              value={profile.baseUrl}
               onChange={(e) => set({ baseUrl: e.target.value })}
               className={fieldCls}
               placeholder="https://api.openai.com/v1"
@@ -195,7 +283,7 @@ export default function AiChatPanel() {
             <span className="text-[10px] uppercase tracking-wider text-neutral-500">API key</span>
             <input
               type="password"
-              value={settings.apiKey}
+              value={profile.apiKey}
               // API keys contain no whitespace — strip any spaces/line breaks
               // picked up when copy-pasting (a space inside the key makes
               // OpenRouter answer "Missing Authentication header" 401)
@@ -208,25 +296,23 @@ export default function AiChatPanel() {
             <span className="text-[10px] uppercase tracking-wider text-neutral-500">Model</span>
             <div ref={pickerRef} className="relative">
               <input
-                value={settings.model}
+                value={profile.model}
                 onChange={(e) => set({ model: e.target.value })}
                 className={`${fieldCls} pr-7`}
                 placeholder="gpt-4o-mini"
-                onFocus={() => isOpenRouter && setPickerOpen(true)}
+                onFocus={() => setPickerOpen(true)}
               />
-              {isOpenRouter && (
-                <button
-                  onClick={() => {
-                    setPickerOpen((v) => !v);
-                    if (!pickerOpen) setTimeout(() => filterRef.current?.focus(), 30);
-                  }}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 rounded px-1 text-xs text-neutral-500 hover:text-amber-300"
-                  title="Pick a model from OpenRouter"
-                >
-                  ▾
-                </button>
-              )}
-              {isOpenRouter && pickerOpen && (
+              <button
+                onClick={() => {
+                  setPickerOpen((v) => !v);
+                  if (!pickerOpen) setTimeout(() => filterRef.current?.focus(), 30);
+                }}
+                className="absolute right-1 top-1/2 -translate-y-1/2 rounded px-1 text-xs text-neutral-500 hover:text-amber-300"
+                title="Pick a model from the endpoint's list"
+              >
+                ▾
+              </button>
+              {pickerOpen && (
                 <div className="absolute left-0 right-0 top-full z-30 mt-1 flex max-h-56 flex-col overflow-hidden rounded border border-neutral-700 bg-neutral-900 shadow-xl">
                   <input
                     ref={filterRef}
@@ -254,7 +340,7 @@ export default function AiChatPanel() {
                             setModelFilter("");
                           }}
                           className={`block w-full px-2 py-1 text-left hover:bg-neutral-800 ${
-                            settings.model === m.id ? "bg-amber-950/40" : ""
+                            profile.model === m.id ? "bg-amber-950/40" : ""
                           }`}
                           title={m.name}
                         >
@@ -269,7 +355,7 @@ export default function AiChatPanel() {
                     )}
                   </div>
                   <button
-                    onClick={() => void loadOrModels()}
+                    onClick={() => void loadModels()}
                     className="shrink-0 border-t border-neutral-700 px-2 py-1 text-left text-[10px] text-neutral-500 hover:text-amber-300"
                   >
                     ↻ Refresh model list
@@ -277,17 +363,24 @@ export default function AiChatPanel() {
                 </div>
               )}
             </div>
-            {isOpenRouter && (
-              <p className="mt-1 text-[10px] leading-snug text-neutral-600">
-                Use the ▾ picker or type a full model ID like{" "}
-                <code className="text-neutral-500">google/gemma-3-27b-it</code> — display names
-                like "Gemma 4 26B A4B" will not work.
-              </p>
+          </div>
+          <div className="col-span-2 flex items-center gap-2">
+            <button onClick={() => void runTest()} disabled={test === "running"} className={btnCls}>
+              {test === "running" ? "Testing…" : "Test connection"}
+            </button>
+            {test !== "idle" && test !== "running" && (
+              <span
+                className={`text-[11px] ${test.ok ? "text-emerald-400" : "text-red-400"}`}
+              >
+                {test.ok
+                  ? `✓ Connected — ${profile.model} responded in ${test.ms}ms`
+                  : `✗ ${test.reason}`}
+              </span>
             )}
           </div>
           <p className="col-span-2 text-[11px] leading-snug text-neutral-500">
-            The key is stored only in this browser (localStorage) and sent only to the endpoint
-            above.
+            The key is stored only in this browser (localStorage, not encrypted) and sent only
+            to the endpoint above.
           </p>
         </div>
       )}
