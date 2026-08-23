@@ -87,3 +87,37 @@ body {
 [data-theme="light"] .hover\:border-cyan-500:hover { border-color: #0891b2; }
 [data-theme="light"] .hover\:border-green-500:hover { border-color: #16a34a; }
 [data-theme="light"] .hover\:border-red-600:hover { border-color: #dc2626; }
+
+/* ── AI panel palette overrides ─────────────────────────────────────────
+   The AI chat panel has its own dark/light palette, independent of the
+   global theme: the panel root carries data-ai-theme + the .ai-panel
+   class, and these rules (higher specificity than the global light-theme
+   overrides above) re-skin the same shared Tailwind classes inside the
+   panel only. Values mirror the global light theme. */
+[data-ai-theme="light"] .ai-panel { background-color: #ffffff; color: #27272a; }
+[data-ai-theme="light"] .ai-panel .bg-neutral-950 { background-color: #e8ebef; }
+[data-ai-theme="light"] .ai-panel .bg-neutral-900 { background-color: #ffffff; }
+[data-ai-theme="light"] .ai-panel .bg-neutral-800 { background-color: #e4e4e7; }
+
+[data-ai-theme="light"] .ai-panel .border-neutral-800 { border-color: #d4d4d8; }
+[data-ai-theme="light"] .ai-panel .border-neutral-700 { border-color: #b8b8c0; }
+
+[data-ai-theme="light"] .ai-panel .text-neutral-200 { color: #27272a; }
+[data-ai-theme="light"] .ai-panel .text-neutral-300 { color: #3f3f46; }
+[data-ai-theme="light"] .ai-panel .text-neutral-400 { color: #52525b; }
+[data-ai-theme="light"] .ai-panel .text-neutral-500 { color: #6e6e78; }
+[data-ai-theme="light"] .ai-panel .text-neutral-600 { color: #8b8b94; }
+
+[data-ai-theme="light"] .ai-panel .text-amber-200 { color: #92400e; }
+[data-ai-theme="light"] .ai-panel .text-amber-300 { color: #92400e; }
+[data-ai-theme="light"] .ai-panel .bg-amber-950\/40 { background-color: rgb(254 243 199 / 0.55); }
+[data-ai-theme="light"] .ai-panel .bg-amber-950\/60 { background-color: rgb(254 243 199 / 0.8); }
+[data-ai-theme="light"] .ai-panel .border-amber-700 { border-color: #b45309; }
+
+[data-ai-theme="light"] .ai-panel .text-emerald-400 { color: #059669; }
+[data-ai-theme="light"] .ai-panel .text-red-400 { color: #dc2626; }
+
+[data-ai-theme="light"] .ai-panel .hover\:bg-neutral-800:hover { background-color: #d8dbe0; }
+[data-ai-theme="light"] .ai-panel .hover\:border-neutral-500:hover { border-color: #8e8e96; }
+[data-ai-theme="light"] .ai-panel .hover\:text-amber-300:hover { color: #92400e; }
+[data-ai-theme="light"] .ai-panel .hover\:border-amber-500:hover { border-color: #d97706; }

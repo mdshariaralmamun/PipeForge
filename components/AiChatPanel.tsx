@@ -51,6 +51,27 @@ export default function AiChatPanel() {
 
   const [test, setTest] = useState<"idle" | "running" | TestResult>("idle");
 
+  // Panel-local palette (dark/light), independent of the global app theme.
+  // Hydrated from localStorage after mount to avoid an SSR/client mismatch.
+  const [palette, setPalette] = useState<"dark" | "light">("dark");
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("pipeforge-ai-palette") === "light") setPalette("light");
+    } catch {
+      // storage unavailable — default dark
+    }
+  }, []);
+  const togglePalette = () =>
+    setPalette((p) => {
+      const next = p === "dark" ? "light" : "dark";
+      try {
+        localStorage.setItem("pipeforge-ai-palette", next);
+      } catch {
+        // storage unavailable — palette lives for this session only
+      }
+      return next;
+    });
+
   const profile =
     store.profiles.find((p) => p.id === store.activeId) ?? store.profiles[0];
 
@@ -184,12 +205,19 @@ export default function AiChatPanel() {
     : models;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="ai-panel flex min-h-0 flex-1 flex-col" data-ai-theme={palette}>
       <div className="flex items-center justify-between border-b border-neutral-800 px-3 py-2">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
           AI chat
         </h2>
         <div className="flex items-center gap-2">
+          <button
+            onClick={togglePalette}
+            className="text-xs text-neutral-500 hover:text-amber-300"
+            title={`AI panel palette: ${palette === "dark" ? "switch to light" : "switch to dark"}`}
+          >
+            {palette === "dark" ? "☀" : "☾"}
+          </button>
           <button
             onClick={() => setShowSettings((v) => !v)}
             className={`text-xs ${showSettings ? "text-amber-300" : "text-neutral-500"} hover:text-amber-300`}
