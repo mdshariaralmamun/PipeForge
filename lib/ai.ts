@@ -96,7 +96,7 @@ async function requestContent(settings: AiSettings, messages: ChatMessage[]): Pr
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${settings.apiKey}`,
+      Authorization: `Bearer ${settings.apiKey.replace(/\s+/g, "")}`,
     },
     body: JSON.stringify({
       model: settings.model,

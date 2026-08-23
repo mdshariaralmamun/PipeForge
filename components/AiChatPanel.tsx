@@ -196,7 +196,10 @@ export default function AiChatPanel() {
             <input
               type="password"
               value={settings.apiKey}
-              onChange={(e) => set({ apiKey: e.target.value })}
+              // API keys contain no whitespace — strip any spaces/line breaks
+              // picked up when copy-pasting (a space inside the key makes
+              // OpenRouter answer "Missing Authentication header" 401)
+              onChange={(e) => set({ apiKey: e.target.value.replace(/\s+/g, "") })}
               className={fieldCls}
               placeholder="sk-… (empty for Ollama)"
             />
