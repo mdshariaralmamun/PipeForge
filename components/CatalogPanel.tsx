@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { BRANDS, CATALOG, FAMILIES, SIZES, getDef } from "@/lib/catalog";
 import { END_TYPE_LABEL, portsCompatible } from "@/lib/compat";
 import { useAssembly } from "@/lib/assembly";
+import { panelDragProps } from "@/lib/panelDrag";
 import type { Family } from "@/lib/types";
 import CustomPartForm from "./CustomPartForm";
 import PartPreview from "./PartPreview";
@@ -76,7 +77,11 @@ export default function CatalogPanel() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center justify-between border-b border-neutral-800 px-3 py-2">
+      <div
+        {...panelDragProps("catalog")}
+        className="flex cursor-grab items-center justify-between border-b border-neutral-800 px-3 py-2 active:cursor-grabbing"
+        title="Drag onto a screen edge to dock, or use ⇄ Move"
+      >
         <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
           Part Catalog
         </h2>

@@ -26,7 +26,10 @@ export default function ContextMenu() {
       onClick={close}
       onContextMenu={(e) => {
         e.preventDefault();
-        close();
+        // The right-release that opened this menu trails a native contextmenu
+        // event which lands on this overlay — swallow that one; a later
+        // right-click (a genuinely new gesture) closes the menu as expected.
+        if (Date.now() - menu.at > 400) close();
       }}
     >
       <div

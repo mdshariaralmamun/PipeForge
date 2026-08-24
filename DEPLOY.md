@@ -67,6 +67,17 @@ GitHub (Settings → Secrets and variables → Actions):
 Every push to `main` then pulls + rebuilds on the VPS. (If using Scenario A,
 reload Caddy only when the Caddyfile changes — normally not needed.)
 
+## CAD export formats (DXF / PDF / IFC / DWG)
+
+All exporters run **client-side** — the Docker image needs nothing extra.
+DWG is the one exception by design: it is a closed Autodesk format with no
+legitimate open-source writer, and the **ODA File Converter** (the standard
+DXF→DWG bridge) cannot be bundled in the image (manual download + license
+agreement, Windows/GUI-centric). The app therefore exports DXF and flags the
+one-click conversion step to the user. If server-side DWG is ever required,
+provision ODA File Converter on the host and add a small conversion endpoint —
+do not silently stub it.
+
 ## Verify
 
 ```bash

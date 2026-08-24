@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useAssembly } from "@/lib/assembly";
 import { getDef } from "@/lib/catalog";
 import { END_TYPE_LABEL } from "@/lib/compat";
+import { panelDragProps } from "@/lib/panelDrag";
 
 const btnCls =
   "rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs text-neutral-200 hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-40";
@@ -36,7 +37,11 @@ export default function PropertiesPanel() {
   if (!sel || !def) {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex items-center justify-between border-b border-neutral-800 px-3 py-2">
+        <div
+          {...panelDragProps("properties")}
+          className="flex cursor-grab items-center justify-between border-b border-neutral-800 px-3 py-2 active:cursor-grabbing"
+          title="Drag onto a screen edge to dock, or use ⇄ Move"
+        >
           <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
             Properties
           </h2>
@@ -75,7 +80,11 @@ export default function PropertiesPanel() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-      <div className="flex items-center justify-between border-b border-neutral-800 px-3 py-2">
+      <div
+        {...panelDragProps("properties")}
+        className="flex cursor-grab items-center justify-between border-b border-neutral-800 px-3 py-2 active:cursor-grabbing"
+        title="Drag onto a screen edge to dock, or use ⇄ Move"
+      >
         <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
           Properties
         </h2>

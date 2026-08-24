@@ -1,7 +1,8 @@
 "use client";
 
-import { useRef } from "react";
-import { Canvas } from "@react-three/fiber";
+import { useEffect, useRef } from "react";
+import * as THREE from "three";
+import { Canvas, useThree } from "@react-three/fiber";
 import {
   GizmoHelper,
   GizmoViewport,
@@ -13,9 +14,10 @@ import {
 } from "@react-three/drei";
 import { useAssembly } from "@/lib/assembly";
 import type { ViewMode } from "@/lib/types";
-import { viewerRef } from "@/lib/viewer";
+import { contextMenuGuard, viewerRef } from "@/lib/viewer";
 import PartMesh from "./PartMesh";
 import FitCamera from "./FitCamera";
+import ReferenceLayer from "./ReferenceLayer";
 import WeldMarkers from "./WeldMarkers";
 
 // 45 deg azimuth, 35.264 deg elevation -> direction (0.577, 0.577, 0.577).
@@ -38,11 +40,53 @@ const ORTHO_VIEWS: Record<
   side: { position: [ISO_DIST, 0, 0], up: [0, 1, 0] },
 };
 
+// Keeps viewerRef pointed at the live renderer/scene/active camera so toolbar
+// actions (PNG screenshot, DXF/PDF/IFC export) work outside the r3f tree.
+function ViewerBridge() {
+  const gl = useThree((s) => s.gl);
+  const scene = useThree((s) => s.scene);
+  const camera = useThree((s) => s.camera);
+  useEffect(() => {
+    viewerRef.gl = gl;
+    viewerRef.scene = scene;
+    viewerRef.camera = camera;
+  }, [gl, scene, camera]);
+  return null;
+}
+
+// Dev-only hooks for the CDP mouse harness (scripts/cdp-mouse-test.mjs):
+// exposes the store, the live camera, and a world→screen projector on window.
+// Rendered only in development builds; never shipped to production.
+function DevHooks() {
+  const camera = useThree((s) => s.camera);
+  const gl = useThree((s) => s.gl);
+  useEffect(() => {
+    const w = window as unknown as Record<string, unknown>;
+    w.__pf = useAssembly;
+    w.__pfCam = camera;
+    w.__pfProject = (x: number, y: number, z: number) => {
+      const v = new THREE.Vector3(x, y, z).project(camera);
+      const r = gl.domElement.getBoundingClientRect();
+      return {
+        x: r.left + ((v.x + 1) / 2) * r.width,
+        y: r.top + ((1 - v.y) / 2) * r.height,
+      };
+    };
+    return () => {
+      delete w.__pf;
+      delete w.__pfCam;
+      delete w.__pfProject;
+    };
+  }, [camera, gl]);
+  return null;
+}
+
 export default function Viewport() {
   const placed = useAssembly((s) => s.placed);
   const viewMode = useAssembly((s) => s.viewMode);
   const clearSelection = useAssembly((s) => s.clearSelection);
   const dragging = useAssembly((s) => s.dragging);
+  const resizing = useAssembly((s) => s.resizing);
   const sketchMode = useAssembly((s) => s.sketchMode);
   const sketchPoints = useAssembly((s) => s.sketchPoints);
   const addSketchPoint = useAssembly((s) => s.addSketchPoint);
@@ -56,6 +100,14 @@ export default function Viewport() {
       onCreated={(state) => {
         viewerRef.gl = state.gl;
       }}
+      onContextMenu={(e) => {
+        // A finished resize-handle drag eats the native context menu once;
+        // everywhere else the app menu (or browser menu) behaves as before.
+        if (contextMenuGuard.suppress) {
+          e.preventDefault();
+          contextMenuGuard.suppress = false;
+        }
+      }}
       onPointerMissed={() => {
         if (!sketchMode) clearSelection();
       }}
@@ -66,9 +118,18 @@ export default function Viewport() {
         if (e.button !== 2) return;
         const start = canvasMenuStart.current;
         canvasMenuStart.current = null;
+        if (!start) return;
+        if (Math.abs(e.clientX - start.x) + Math.abs(e.clientY - start.y) >= 6) {
+          // Any right-drag (orbit, part, resize handle): swallow the native
+          // context menu this release would fire. Clicks keep the app menu.
+          contextMenuGuard.suppress = true;
+          return;
+        }
+        // A part that just opened its own menu wins over the canvas menu.
+        const cm = useAssembly.getState().contextMenu;
+        if (cm && Date.now() - cm.at < 200) return;
         // Right-click on empty space: canvas command menu.
-        if (start && Math.abs(e.clientX - start.x) + Math.abs(e.clientY - start.y) < 6)
-          openContextMenu(e.clientX, e.clientY, null);
+        openContextMenu(e.clientX, e.clientY, null);
       }}
     >
       <color attach="background" args={[theme === "light" ? "#dde3ea" : "#0b0e12"]} />
@@ -85,14 +146,22 @@ export default function Viewport() {
           far={500}
         />
       )}
-      {/* Remount on camera swap so the controls bind to the new default camera. */}
+      {/* Remount on camera swap so the controls bind to the new default camera.
+          §3 interaction model: left-drag on empty canvas pans (dragging a part
+          moves the part instead), right-drag orbits in 3D/iso views and pans
+          in the 2D views where rotation is off. */}
       <OrbitControls
         key={viewMode}
         makeDefault
-        enabled={!dragging}
+        enabled={!dragging && !resizing}
         enableDamping
         dampingFactor={0.12}
         enableRotate={viewMode === "3d" || viewMode === "iso"}
+        mouseButtons={{
+          LEFT: THREE.MOUSE.PAN,
+          MIDDLE: THREE.MOUSE.DOLLY,
+          RIGHT: viewMode === "3d" || viewMode === "iso" ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN,
+        }}
       />
 
       <ambientLight intensity={0.55} />
@@ -117,6 +186,8 @@ export default function Viewport() {
       {placed.map((p) => (
         <PartMesh key={p.uid} placed={p} />
       ))}
+
+      <ReferenceLayer />
 
       <FitCamera />
 
@@ -163,6 +234,9 @@ export default function Viewport() {
           labelColor="#e4e4e7"
         />
       </GizmoHelper>
+
+      {process.env.NODE_ENV === "development" && <DevHooks />}
+      <ViewerBridge />
     </Canvas>
   );
 }

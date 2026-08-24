@@ -21,7 +21,14 @@ Installers are produced by the **Desktop installers** GitHub Actions workflow
   face-seal, orbital weld, fusion, flange) and adapter suggestions
 - Stretchable tube/pipe runs, auto weld-joint marking, bend formulas
 - Dockable panels, dark/light theme, keyboard shortcuts, undo/redo
+- Plan (Top), elevation (Front/Side), isometric and 3D views of one 3D model,
+  with a CAD-style mouse model: left-drag pans empty space or moves parts,
+  right-drag orbits, right-drag stretches tube ends, Shift locks the axis,
+  Esc cancels
 - Schematic + dimensioned iso sheet (SVG), MTO with order notes (CSV)
+- CAD exchange: DXF, vector-PDF and IFC4 export (DWG flagged via ODA File
+  Converter), vendor PDF-catalog import with a review step, and DXF/PDF
+  drawing underlays with two-point scale calibration
 - AI chat designer (bring-your-own OpenAI-compatible key, works with Ollama):
   conversational copilot that explains the project and modifies it — adds parts,
   routes 3D tube runs (horizontal + vertical), removes parts, clears, undoes

@@ -32,7 +32,7 @@ const chapters: [string, string][] = [
   ["building", "5. Building a system"],
   ["editing", "6. Moving, rotating, stretching"],
   ["sketch", "7. Sketch run (freehand drafting)"],
-  ["outputs", "8. 2D drawings & exports"],
+  ["outputs", "8. 2D drawings, export & import"],
   ["mto", "9. MTO & ordering"],
   ["custom", "10. Custom parts & manifolds"],
   ["ai", "11. AI designer (your own key)"],
@@ -151,9 +151,11 @@ export default function HelpPage() {
               preview, and the custom-part form at the bottom.
             </LI>
             <LI>
-              <b>Center — 3D viewport:</b> drag to orbit, right-drag to pan, scroll to zoom.
-              Green spheres are free ports, yellow is the active port, gray are connected,
-              orange rings mark weld joints, and a cyan cube marks a tube that can be split.
+              <b>Center — 3D viewport:</b> left-drag empty space to pan, right-drag to orbit
+              (pan in the 2D views), scroll to zoom. Drag a part with the left button to move
+              it; hold Shift to lock the drag to one axis, Esc cancels the drag. Green spheres
+              are free ports, yellow is the active port, gray are connected, orange rings mark
+              weld joints, and a cyan cube marks a tube that can be split.
             </LI>
             <LI>
               <b>Right — Properties:</b> part spec, move/rotate controls, tube length, bend
@@ -217,15 +219,18 @@ export default function HelpPage() {
           <H2 id="editing">6. Moving, rotating, stretching</H2>
           <ul className="mt-3 list-disc space-y-2 pl-5">
             <LI>
-              <b>Move:</b> drag any free (unconnected) part with the mouse — grid-snapped to
-              0.25 in. Arrow keys nudge, PgUp/PgDn lift.
+              <b>Move:</b> drag any free (unconnected) part with the left mouse button —
+              grid-snapped to 0.25 in. Hold Shift to constrain the drag to the X or Z axis,
+              Esc cancels mid-drag. Arrow keys nudge, PgUp/PgDn lift.
             </LI>
             <LI>
               <b>Rotate:</b> quick 90° buttons, or any angle 0–360° around X/Y/Z from the
               Properties panel (AutoCAD/Revit style).
             </LI>
             <LI>
-              <b>Stretch:</b> Dockweiler tubes and PP-H/HDPE pipes have a <b>Length</b> field.
+              <b>Stretch:</b> Dockweiler tubes and PP-H/HDPE pipes have a <b>Length</b> field,
+              and the selected tube shows orange handles at both ends — right-drag a handle to
+              stretch or shrink the tube in place (works on vertical runs too; Esc cancels).
               Beyond the 6 in standard stick, orbital weld joints appear automatically (orange
               rings + weld schedule).
             </LI>
@@ -246,7 +251,7 @@ export default function HelpPage() {
             </LI>
           </ol>
 
-          <H2 id="outputs">8. 2D drawings & exports</H2>
+          <H2 id="outputs">8. 2D drawings, export &amp; import</H2>
           <ul className="mt-3 list-disc space-y-2 pl-5">
             <LI>
               <b>Ortho views:</b> Top / Front / Side toolbar buttons — flat orthographic
@@ -263,6 +268,50 @@ export default function HelpPage() {
             </LI>
             <LI>
               <b>PNG:</b> one-click viewport snapshot, in any view.
+            </LI>
+            <LI>
+              <b>Export ▾ → DXF:</b> native AutoCAD exchange — every part as 3D solid
+              faces (layer <code>PARTS</code>), port-to-port centerlines
+              (<code>CENTERLINES</code>), and part-number labels (<code>LABELS</code>),
+              in inches.
+            </LI>
+            <LI>
+              <b>Export ▾ → PDF:</b> vector line drawing of the <b>current</b> camera view
+              (3D / Iso / Top / Front / Side) on A4 — wireframe, so line work stays crisp
+              at any zoom (hidden lines are not removed).
+            </LI>
+            <LI>
+              <b>Export ▾ → IFC:</b> BIM exchange (IFC4 STEP) — straight tube/pipe runs
+              become <code>IfcPipeSegment</code>, fittings and valves
+              become <code>IfcPipeFitting</code>, with faceted solid geometry in metres.
+            </LI>
+            <LI>
+              <b>Export ▾ → DWG:</b> DWG is a closed Autodesk format with no legitimate
+              open writer, so PipeForge exports DXF instead and you convert it with the
+              free <b>ODA File Converter</b> (Open Design Alliance) — a one-click,
+              lossless DXF→DWG step.
+            </LI>
+            <LI>
+              <b>Import ▾ → PDF catalog → parts:</b> upload a vendor catalog (Swagelok,
+              Parker, …). PipeForge reads the text, detects part numbers, fitting types
+              (elbow / tee / valve / …) and sizes, and shows a <b>review list</b> — only
+              the rows you approve become catalog parts (Custom section). Scanned PDFs
+              with no embedded text are flagged for manual entry instead of guessed.
+            </LI>
+            <LI>
+              <b>Import ▾ → DXF drawing → underlay:</b> site-plan linework (lines,
+              polylines, arcs, circles) lands as a <b>locked reference layer</b> under
+              the model — visible, never editable.
+            </LI>
+            <LI>
+              <b>Import ▾ → PDF drawing → underlay:</b> page 1 renders as a positioned
+              image on the same locked layer. Set its true scale with <b>Calibrate scale
+              (2 points)</b>: click two points on the underlay, enter the real distance.
+              Offset X/Z fields fine-position it. Underlays are session-only (not saved).
+            </LI>
+            <LI>
+              <b>Import ▾ → DWG drawing:</b> same rule as export — convert to DXF with
+              the ODA File Converter first, then import the DXF.
             </LI>
           </ul>
 

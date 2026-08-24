@@ -1,6 +1,7 @@
 "use client";
 
 import { buildMto, mtoToCsv, useAssembly } from "@/lib/assembly";
+import { panelDragProps } from "@/lib/panelDrag";
 import { downloadText, timestamp } from "@/lib/viewer";
 
 export default function MtoPanel() {
@@ -18,7 +19,11 @@ export default function MtoPanel() {
 
   return (
     <section className="shrink-0 border-t border-neutral-800 bg-neutral-900">
-      <header className="flex items-center gap-3 px-4 py-1.5">
+      <header
+        {...panelDragProps("mto")}
+        className="flex cursor-grab items-center gap-3 px-4 py-1.5 active:cursor-grabbing"
+        title="Drag onto a screen edge to dock, or use ⇄ Move"
+      >
         <button
           onClick={toggleMto}
           className="w-5 text-neutral-400 hover:text-neutral-200"

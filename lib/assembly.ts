@@ -4,6 +4,8 @@ import { allDefs, effPorts, getDef, registerCustomDef } from "./catalog";
 import { END_TYPE_LABEL, findAdapters, portsCompatible } from "./compat";
 import { CUSTOM_STORAGE_KEY, serializeCustomDefs } from "./custom";
 import { anyOverlap } from "./geom";
+import type { CatalogDraft } from "./pdfCatalog";
+import type { ReferenceLayer } from "./reference";
 import { buildRunParts } from "./run";
 import type {
   ActivePortRef,
@@ -33,7 +35,7 @@ export interface AssemblyState {
   placed: PlacedComponent[];
   selectedUid: string | null; // primary selection (drives the Properties panel)
   selectedUids: string[]; // full selection set (Ctrl+click multi-select)
-  contextMenu: { x: number; y: number; uid: string | null } | null; // right-click menu
+  contextMenu: { x: number; y: number; uid: string | null; at: number } | null; // right-click menu
   activePort: ActivePortRef | null;
   compatOnly: boolean; // when a port is active, limit catalog to compatible parts
   viewMode: ViewMode;
@@ -42,6 +44,8 @@ export interface AssemblyState {
   notice: string | null; // user message (e.g. refused joint + adapter suggestion)
   customDefs: ComponentDef[]; // user-added catalog parts
   dragging: boolean; // a part is being mouse-dragged (orbit controls off)
+  resizing: boolean; // a stretch handle is being dragged (orbit controls off)
+  dragSnapshot: { uid: string; position: Vec3; lengthOverride?: number } | null;
   sketchMode: boolean; // freehand run drafting: click points on the floor
   sketchPoints: Vec3[];
   splitTarget: string | null; // uid of a stretchable tube to split mid-run
@@ -54,6 +58,12 @@ export interface AssemblyState {
   cloudOpen: boolean; // cloud projects dialog open
   cloudId: string | null; // currently open cloud project
   cloudName: string | null;
+  // PDF catalog import (§5): parse results awaiting review before commit.
+  catalogImport: { open: boolean; drafts: CatalogDraft[]; message: string | null; pages: number };
+  // Reference underlay (§6): locked DXF/PDF layer under the model, plus the
+  // two-point scale-calibration mode.
+  reference: ReferenceLayer | null;
+  calibrating: boolean;
   systemDefs: ComponentDef[]; // approved shared-catalog parts (read-only)
   theme: "dark" | "light";
   panelZones: Record<PanelName, PanelZone>; // dock location per panel
@@ -77,7 +87,15 @@ export interface AssemblyState {
   mergeCustomDefs: (defs: ComponentDef[]) => void;
   clearNotice: () => void;
   setDragging: (v: boolean) => void;
+  setResizing: (v: boolean) => void;
   moveSelectedTo: (x: number, z: number) => void;
+  // Live stretch of the selected tube along its own axis (any orientation);
+  // `keepEnd` anchors the p1 (-X) or p2 (+X) end so the opposite end follows
+  // the cursor. No history per move — one undo step per drag via setResizing.
+  stretchSelectedTo: (wx: number, wy: number, wz: number, keepEnd: "p1" | "p2") => void;
+  // Pre-drag snapshot taken when a move/resize starts; Escape restores it.
+  setDragSnapshot: (snap: { uid: string; position: Vec3; lengthOverride?: number } | null) => void;
+  cancelActiveDrag: () => void;
   toggleSketch: () => void;
   addSketchPoint: (p: Vec3) => void;
   finishSketch: () => void;
@@ -91,10 +109,20 @@ export interface AssemblyState {
   toggleRightPanel: () => void;
   closePanels: () => void;
   setCloudOpen: (v: boolean) => void;
+  setCatalogImport: (v: {
+    open: boolean;
+    drafts?: CatalogDraft[];
+    message?: string | null;
+    pages?: number;
+  }) => void;
+  setReference: (r: ReferenceLayer | null) => void;
+  updateReference: (p: Partial<Omit<ReferenceLayer, "kind" | "name">>) => void;
+  setCalibrating: (v: boolean) => void;
   setCloudRef: (id: string | null, name: string | null) => void;
   setSystemDefs: (defs: ComponentDef[]) => void;
   toggleTheme: () => void;
   cyclePanel: (panel: PanelName) => void;
+  setPanelZone: (panel: PanelName, zone: PanelZone) => void;
   say: (msg: string) => void;
   undo: () => void;
   redo: () => void;
@@ -114,6 +142,11 @@ function hist(s: AssemblyState): Pick<AssemblyState, "past" | "future"> {
   return { past: [...s.past.slice(-(HISTORY_LIMIT - 1)), s.placed], future: [] };
 }
 
+// Selection is a primary uid plus a set (Ctrl+click multi-select); the two
+// must stay in sync or highlights/handles/Properties disagree. Every action
+// that picks a single part spreads this helper instead of setting one field.
+const sel = (uid: string | null) => ({ selectedUid: uid, selectedUids: uid ? [uid] : [] });
+
 export const useAssembly = create<AssemblyState>()((set, get) => ({
   placed: [],
   selectedUid: null,
@@ -127,6 +160,8 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
   notice: null,
   customDefs: [],
   dragging: false,
+  resizing: false,
+  dragSnapshot: null,
   sketchMode: false,
   sketchPoints: [],
   splitTarget: null,
@@ -137,6 +172,9 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
   past: [],
   future: [],
   cloudOpen: false,
+  catalogImport: { open: false, drafts: [], message: null, pages: 0 },
+  reference: null,
+  calibrating: false,
   cloudId: null,
   cloudName: null,
   systemDefs: [],
@@ -185,7 +223,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
         set({
           ...hist(s),
           placed: [...placed, placedNew],
-          selectedUid: uid,
+          ...sel(uid),
           activePort: nextFree ? { uid, portId: nextFree.id } : null,
           compatOnly: true,
           notice: null,
@@ -223,7 +261,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
     set({
       ...hist(s),
       placed: [...s.placed, drop],
-      selectedUid: uid,
+      ...sel(uid),
       notice: null,
     });
   },
@@ -351,7 +389,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
       };
     }),
 
-  openContextMenu: (x, y, uid) => set({ contextMenu: { x, y, uid } }),
+  openContextMenu: (x, y, uid) => set({ contextMenu: { x, y, uid, at: Date.now() } }),
 
   closeContextMenu: () => set({ contextMenu: null }),
 
@@ -389,7 +427,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
   toggleMto: () => set((s) => ({ mtoOpen: !s.mtoOpen })),
 
   clearAll: () =>
-    set((s) => ({ ...hist(s), placed: [], selectedUid: null, activePort: null })),
+    set((s) => ({ ...hist(s), placed: [], ...sel(null), activePort: null })),
 
   rotateSelectedBy: (axis, degrees) => {
     const s = get();
@@ -514,6 +552,55 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
   // Drag start snapshots once, so a whole drag = one undo step.
   setDragging: (v) => set((s) => (v ? { ...hist(s), dragging: true } : { dragging: false })),
 
+  setResizing: (v) => set((s) => (v ? { ...hist(s), resizing: true } : { resizing: false })),
+
+  // Stretch a free tube by moving one end to the cursor, keeping the other end
+  // fixed. The tube axis in world space is its quaternion-applied local X.
+  stretchSelectedTo: (wx, wy, wz, keepEnd) => {
+    const s = get();
+    const sel = s.placed.find((p) => p.uid === s.selectedUid);
+    if (!sel || sel.connections.length > 0) return;
+    const def = getDef(sel.defId);
+    if (!def?.stretchable) return;
+    const q = new THREE.Quaternion(...sel.quaternion);
+    const X = new THREE.Vector3(1, 0, 0).applyQuaternion(q).normalize();
+    const c = new THREE.Vector3(...sel.position);
+    const oldLen = sel.lengthOverride ?? def.dims.len;
+    // World position of the anchored end (p1 is -X, p2 is +X along the axis).
+    const anchor = c.clone().addScaledVector(X, keepEnd === "p1" ? -oldLen / 2 : oldLen / 2);
+    const dir = keepEnd === "p1" ? 1 : -1; // anchor -> free end must point along ±X
+    const newLen = new THREE.Vector3(wx - anchor.x, wy - anchor.y, wz - anchor.z).dot(X) * dir;
+    const clamped = Math.min(36, Math.max(1, Math.round(newLen * 4) / 4));
+    const newCenter = anchor.clone().addScaledVector(X, (clamped / 2) * dir);
+    const cand: PlacedComponent = {
+      ...sel,
+      lengthOverride: clamped,
+      position: [newCenter.x, newCenter.y, newCenter.z],
+    };
+    if (anyOverlap(cand, s.placed)) return;
+    set({ placed: s.placed.map((p) => (p.uid === sel.uid ? cand : p)) });
+  },
+
+  setDragSnapshot: (snap) => set({ dragSnapshot: snap }),
+
+  // Escape mid-drag: put the part back where it was and end the drag. The
+  // history snapshot taken at drag start is popped so cancel leaves no trace.
+  cancelActiveDrag: () =>
+    set((s) => {
+      const snap = s.dragSnapshot;
+      const base = { dragging: false, resizing: false, dragSnapshot: null };
+      if (!snap) return base;
+      return {
+        ...base,
+        past: s.past.slice(0, -1),
+        placed: s.placed.map((p) =>
+          p.uid === snap.uid
+            ? { ...p, position: snap.position, lengthOverride: snap.lengthOverride }
+            : p,
+        ),
+      };
+    }),
+
   moveSelectedTo: (x, z) => {
     const s = get();
     const sel = s.placed.find((p) => p.uid === s.selectedUid);
@@ -558,7 +645,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
     set({
       ...hist(s),
       placed: [...s.placed, ...newParts],
-      selectedUid: lastTube?.uid ?? null,
+      ...sel(lastTube?.uid ?? null),
       notice: `Run drafted: ${newParts.length} parts (1/4 in ULTRON tube, orbital-weld joints).`,
     });
   },
@@ -576,7 +663,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
     set({
       ...hist(s),
       placed: [...s.placed, ...newParts],
-      selectedUid: newParts[newParts.length - 1].uid,
+      ...sel(newParts[newParts.length - 1].uid),
       notice: null,
     });
   },
@@ -593,6 +680,25 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
 
   setCloudOpen: (v) => set({ cloudOpen: v }),
 
+  setCatalogImport: (v) =>
+    set((s) => ({
+      catalogImport: {
+        open: v.open,
+        drafts: v.drafts ?? (v.open ? s.catalogImport.drafts : []),
+        message: v.message !== undefined ? v.message : v.open ? s.catalogImport.message : null,
+        pages: v.pages ?? (v.open ? s.catalogImport.pages : 0),
+      },
+    })),
+
+  // A new underlay always lands locked: it renders under the model, has no
+  // pointer handlers, and is never editable — positioning happens through the
+  // panel fields / two-point calibration only.
+  setReference: (r) => set({ reference: r, calibrating: false }),
+
+  updateReference: (p) => set((s) => (s.reference ? { reference: { ...s.reference, ...p } } : {})),
+
+  setCalibrating: (v) => set({ calibrating: v }),
+
   setCloudRef: (id, name) => set({ cloudId: id, cloudName: name }),
 
   setSystemDefs: (defs) => set({ systemDefs: defs }),
@@ -608,11 +714,15 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
       return { theme };
     }),
 
-  cyclePanel: (panel) =>
+  cyclePanel: (panel) => {
+    const order: PanelZone[] = ["left", "right", "bottom"];
+    const s = get();
+    get().setPanelZone(panel, order[(order.indexOf(s.panelZones[panel]) + 1) % order.length]);
+  },
+
+  setPanelZone: (panel, zone) =>
     set((s) => {
-      const order: PanelZone[] = ["left", "right", "bottom"];
-      const next = order[(order.indexOf(s.panelZones[panel]) + 1) % order.length];
-      const panelZones = { ...s.panelZones, [panel]: next };
+      const panelZones = { ...s.panelZones, [panel]: zone };
       try {
         localStorage.setItem("pipeforge-panels", JSON.stringify(panelZones));
       } catch {
@@ -632,7 +742,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
         past,
         future: [...s.future, s.placed],
         placed,
-        selectedUid: null,
+        ...sel(null),
         activePort: null,
         splitTarget: null,
         notice: null,
@@ -648,7 +758,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
         future,
         past: [...s.past, s.placed],
         placed,
-        selectedUid: null,
+        ...sel(null),
         activePort: null,
         splitTarget: null,
         notice: null,
@@ -724,13 +834,13 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
       ...hist(s),
       placed: [...s.placed.filter((p) => p.uid !== target.uid), segA, segB, mid],
       splitTarget: null,
-      selectedUid: uidMid,
+      ...sel(uidMid),
       notice: null,
     });
   },
 
   loadProject: (placed) =>
-    set((s) => ({ ...hist(s), placed, selectedUid: null, activePort: null })),
+    set((s) => ({ ...hist(s), placed, ...sel(null), activePort: null })),
 }));
 
 // Snap transform: make two port faces coincident and their axes anti-parallel

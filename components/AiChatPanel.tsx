@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useAssembly } from "@/lib/assembly";
+import { panelDragProps } from "@/lib/panelDrag";
 import { useAiChat } from "@/lib/aiChat";
 import { DEFAULT_AI_SETTINGS } from "@/lib/ai";
 import {
@@ -52,15 +53,16 @@ export default function AiChatPanel() {
   const [test, setTest] = useState<"idle" | "running" | TestResult>("idle");
 
   // Panel-local palette (dark/light), independent of the global app theme.
-  // Hydrated from localStorage after mount to avoid an SSR/client mismatch.
-  const [palette, setPalette] = useState<"dark" | "light">("dark");
-  useEffect(() => {
+  // The panel only mounts when opened, so a lazy initializer can read
+  // localStorage directly without an SSR/client mismatch.
+  const [palette, setPalette] = useState<"dark" | "light">(() => {
     try {
-      if (localStorage.getItem("pipeforge-ai-palette") === "light") setPalette("light");
+      return localStorage.getItem("pipeforge-ai-palette") === "light" ? "light" : "dark";
     } catch {
       // storage unavailable — default dark
+      return "dark";
     }
-  }, []);
+  });
   const togglePalette = () =>
     setPalette((p) => {
       const next = p === "dark" ? "light" : "dark";
@@ -83,6 +85,17 @@ export default function AiChatPanel() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, busy]);
 
+  // Patch the active profile and persist immediately (save-on-keystroke).
+  const set = (patch: Partial<Omit<(typeof store.profiles)[number], "id">>) =>
+    setStore((s) => {
+      const next: AiProfileStore = {
+        ...s,
+        profiles: s.profiles.map((p) => (p.id === s.activeId ? { ...p, ...patch } : p)),
+      };
+      saveAiProfiles(next);
+      return next;
+    });
+
   // Fetch the model list from the active endpoint (OpenAI shape: GET
   // {base}/models → {data:[{id,…}]}). OpenRouter answers without a key;
   // most others need the Bearer header. Failure just leaves the list empty —
@@ -102,6 +115,13 @@ export default function AiChatPanel() {
         .map((m) => ({ id: m.id, name: m.name || m.id }))
         .sort((a, b) => a.id.localeCompare(b.id));
       setModels(list);
+      // Auto-correct a saved display name (e.g. "Gemma 4 26B A4B") to the
+      // real model ID (e.g. "google/gemma-3-27b-it") once the list arrives.
+      const saved = profile.model.trim();
+      if (saved && !list.some((m) => m.id === saved)) {
+        const byName = list.find((m) => m.name.toLowerCase() === saved.toLowerCase());
+        if (byName) set({ model: byName.id });
+      }
     } catch {
       setModels([]);
     } finally {
@@ -117,18 +137,6 @@ export default function AiChatPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile.baseUrl, profile.id]);
 
-  // Auto-correct a saved display name (e.g. "Gemma 4 26B A4B") to the real
-  // model ID (e.g. "google/gemma-3-27b-it") once the model list arrives.
-  useEffect(() => {
-    if (models.length === 0) return;
-    const saved = profile.model.trim();
-    if (!saved) return;
-    if (models.some((m) => m.id === saved)) return; // already a valid ID
-    const byName = models.find((m) => m.name.toLowerCase() === saved.toLowerCase());
-    if (byName) set({ model: byName.id });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [models]);
-
   // Close the picker when clicking outside.
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
@@ -137,17 +145,6 @@ export default function AiChatPanel() {
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
-
-  // Patch the active profile and persist immediately (save-on-keystroke).
-  const set = (patch: Partial<Omit<(typeof store.profiles)[number], "id">>) =>
-    setStore((s) => {
-      const next: AiProfileStore = {
-        ...s,
-        profiles: s.profiles.map((p) => (p.id === s.activeId ? { ...p, ...patch } : p)),
-      };
-      saveAiProfiles(next);
-      return next;
-    });
 
   const selectProfile = (id: string) =>
     setStore((s) => {
@@ -206,7 +203,11 @@ export default function AiChatPanel() {
 
   return (
     <div className="ai-panel flex min-h-0 flex-1 flex-col" data-ai-theme={palette}>
-      <div className="flex items-center justify-between border-b border-neutral-800 px-3 py-2">
+      <div
+        {...panelDragProps("ai")}
+        className="flex cursor-grab items-center justify-between border-b border-neutral-800 px-3 py-2 active:cursor-grabbing"
+        title="Drag onto a screen edge to dock, or use ⇄ Move"
+      >
         <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
           AI chat
         </h2>

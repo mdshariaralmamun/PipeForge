@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import AiChatPanel from "./AiChatPanel";
 import CatalogPanel from "./CatalogPanel";
 import CloudPanel from "./CloudPanel";
+import CatalogImportDialog from "./CatalogImportDialog";
 import ContextMenu from "./ContextMenu";
+import ReferencePanel from "./ReferencePanel";
 import DrawingPanel from "./DrawingPanel";
 import MtoPanel from "./MtoPanel";
 import PropertiesPanel from "./PropertiesPanel";
@@ -47,12 +49,27 @@ export default function AppShell() {
   const closePanels = useAssembly((s) => s.closePanels);
   const theme = useAssembly((s) => s.theme);
   const panelZones = useAssembly((s) => s.panelZones);
+  const setPanelZone = useAssembly((s) => s.setPanelZone);
   const aiOpen = useAssembly((s) => s.aiOpen);
   // The AI chat palette only renders while open; the rest are always parked.
   const visible = aiOpen ? [...PANELS, "ai" as PanelName] : PANELS;
   const leftPanels = visible.filter((p) => panelZones[p] === "left");
   const rightPanels = visible.filter((p) => panelZones[p] === "right");
   const bottomPanels = visible.filter((p) => panelZones[p] === "bottom");
+
+  // Panel drag-to-dock: while a panel header is dragged, show the three drop
+  // targets (see lib/panelDrag.ts); dropping sets the panel's zone.
+  const [dragPanel, setDragPanel] = useState<PanelName | null>(null);
+  const [dropZone, setDropZone] = useState<PanelZone | null>(null);
+  useEffect(() => {
+    const onDrag = (e: Event) => {
+      const detail = (e as CustomEvent<PanelName | null>).detail;
+      setDragPanel(detail);
+      if (!detail) setDropZone(null);
+    };
+    window.addEventListener("pf-panel-drag", onDrag);
+    return () => window.removeEventListener("pf-panel-drag", onDrag);
+  }, []);
 
   // Hydrate from localStorage once, then autosave on every change (debounced).
   useEffect(() => {
@@ -201,6 +218,16 @@ export default function AppShell() {
           st.deleteSelected();
           break;
         case "escape":
+          // An in-progress move/resize drag gets cancelled and restored first;
+          // only when idle does Escape clear selection/panels as usual.
+          if (st.dragging || st.resizing) {
+            st.cancelActiveDrag();
+            break;
+          }
+          if (st.calibrating) {
+            st.setCalibrating(false);
+            break;
+          }
           st.clearSelection();
           st.cancelSketch();
           st.setSplitTarget(null);
@@ -269,6 +296,7 @@ export default function AppShell() {
         <div className="flex min-w-0 flex-1 flex-col">
           <main className="relative min-h-0 flex-1 bg-neutral-950 [touch-action:none]">
             <Viewport />
+            <ReferencePanel />
           </main>
           {bottomPanels.length > 0 && (
             <div className="flex max-h-72 shrink-0 divide-x divide-neutral-800 overflow-x-auto border-t border-neutral-800 bg-neutral-900">
@@ -297,9 +325,43 @@ export default function AppShell() {
             className="absolute inset-0 z-30 bg-black/50 md:hidden"
           />
         )}
+        {/* Panel drag-to-dock targets, visible only while a header is dragged */}
+        {dragPanel &&
+          (
+            [
+              { zone: "left" as PanelZone, cls: "inset-y-0 left-0 w-72" },
+              { zone: "right" as PanelZone, cls: "inset-y-0 right-0 w-80" },
+              { zone: "bottom" as PanelZone, cls: "inset-x-0 bottom-0 h-44" },
+            ] as const
+          ).map(({ zone, cls }) => (
+            <div
+              key={zone}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                setDropZone(zone);
+              }}
+              onDragLeave={() => setDropZone((z) => (z === zone ? null : z))}
+              onDrop={(e) => {
+                e.preventDefault();
+                const p = e.dataTransfer.getData("pf-panel") as PanelName | "";
+                if (p) setPanelZone(p, zone);
+                setDragPanel(null);
+                setDropZone(null);
+              }}
+              className={`absolute z-40 flex items-center justify-center border-2 border-dashed text-xs font-medium ${cls} ${
+                dropZone === zone
+                  ? "border-amber-400 bg-amber-400/10 text-amber-200"
+                  : "border-neutral-600 bg-neutral-950/40 text-neutral-400"
+              }`}
+            >
+              Drop to dock {zone}
+            </div>
+          ))}
       </div>
       <DrawingPanel />
       <CloudPanel />
+      <CatalogImportDialog />
       <ContextMenu />
     </div>
   );

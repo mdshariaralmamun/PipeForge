@@ -6,6 +6,7 @@ import type { ThreeEvent } from "@react-three/fiber";
 import { useAssembly } from "@/lib/assembly";
 import { effPorts, getDef } from "@/lib/catalog";
 import type { ComponentDef, PlacedComponent } from "@/lib/types";
+import { contextMenuGuard } from "@/lib/viewer";
 
 // Shared materials (316 stainless look + accents).
 export const steel = new THREE.MeshStandardMaterial({
@@ -620,13 +621,21 @@ export default function PartMesh({ placed }: { placed: PlacedComponent }) {
   const toggleSelect = useAssembly((s) => s.toggleSelect);
   const setActivePort = useAssembly((s) => s.setActivePort);
   const setDragging = useAssembly((s) => s.setDragging);
+  const setResizing = useAssembly((s) => s.setResizing);
   const moveSelectedTo = useAssembly((s) => s.moveSelectedTo);
+  const stretchSelectedTo = useAssembly((s) => s.stretchSelectedTo);
+  const setDragSnapshot = useAssembly((s) => s.setDragSnapshot);
   const splitTarget = useAssembly((s) => s.splitTarget);
   const setSplitTarget = useAssembly((s) => s.setSplitTarget);
   const openContextMenu = useAssembly((s) => s.openContextMenu);
 
   const dragPlane = useRef(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0));
+  const resizePlane = useRef(new THREE.Plane());
   const draggingRef = useRef(false);
+  // Resize drag state: which end stays anchored + grab offset along the axis.
+  const resizingRef = useRef<{ keepEnd: "p1" | "p2" } | null>(null);
+  // Drag-start part position, for Shift axis-constraint while moving.
+  const moveOrigin = useRef<[number, number]>([0, 0]);
   const menuStart = useRef<{ x: number; y: number } | null>(null);
 
   if (!baseDef) return null;
@@ -655,7 +664,7 @@ export default function PartMesh({ placed }: { placed: PlacedComponent }) {
   const onPointerDown = (e: ThreeEvent<PointerEvent>) => {
     if (e.button === 2) {
       // Right button: remember the position for the context menu; let
-      // OrbitControls keep right-drag pan.
+      // OrbitControls keep right-drag orbit.
       menuStart.current = { x: e.clientX, y: e.clientY };
       return;
     }
@@ -664,16 +673,34 @@ export default function PartMesh({ placed }: { placed: PlacedComponent }) {
     e.stopPropagation();
     select(placed.uid);
     draggingRef.current = true;
+    setDragSnapshot({
+      uid: placed.uid,
+      position: placed.position,
+      lengthOverride: placed.lengthOverride,
+    });
     setDragging(true);
     dragPlane.current.constant = -placed.position[1];
+    moveOrigin.current = [placed.position[0], placed.position[2]];
     (e.target as Element).setPointerCapture(e.pointerId);
   };
 
   const onPointerMove = (e: ThreeEvent<PointerEvent>) => {
     if (!draggingRef.current) return;
+    // Drag was cancelled via Escape (store flag cleared) — drop the gesture.
+    if (!useAssembly.getState().dragging) {
+      draggingRef.current = false;
+      return;
+    }
     e.stopPropagation();
     const hit = new THREE.Vector3();
     if (e.ray.intersectPlane(dragPlane.current, hit)) {
+      // Shift constrains movement to the dominant axis from the drag origin.
+      if (e.nativeEvent.shiftKey) {
+        const dx = Math.abs(hit.x - moveOrigin.current[0]);
+        const dz = Math.abs(hit.z - moveOrigin.current[1]);
+        if (dx >= dz) hit.z = moveOrigin.current[1];
+        else hit.x = moveOrigin.current[0];
+      }
       moveSelectedTo(Math.round(hit.x * 4) / 4, Math.round(hit.z * 4) / 4);
     }
   };
@@ -682,7 +709,7 @@ export default function PartMesh({ placed }: { placed: PlacedComponent }) {
     if (e.button === 2) {
       const start = menuStart.current;
       menuStart.current = null;
-      // Right-click (not a pan drag): open the command menu on the part.
+      // Right-click (not an orbit drag): open the command menu on the part.
       if (start && Math.abs(e.clientX - start.x) + Math.abs(e.clientY - start.y) < 6) {
         e.stopPropagation();
         openContextMenu(e.clientX, e.clientY, placed.uid);
@@ -695,6 +722,61 @@ export default function PartMesh({ placed }: { placed: PlacedComponent }) {
     (e.target as Element).releasePointerCapture(e.pointerId);
   };
 
+  // Stretch handles: right-drag an end handle to resize the tube, keeping the
+  // opposite end anchored. The drag plane contains the tube axis and faces the
+  // camera, so both horizontal and vertical tubes can be stretched.
+  const onHandleDown = (keepEnd: "p1" | "p2") => (e: ThreeEvent<PointerEvent>) => {
+    if (e.button !== 2) return;
+    e.stopPropagation();
+    select(placed.uid);
+    resizingRef.current = { keepEnd };
+    setDragSnapshot({
+      uid: placed.uid,
+      position: placed.position,
+      lengthOverride: placed.lengthOverride,
+    });
+    setResizing(true);
+    const axisX = new THREE.Vector3(1, 0, 0)
+      .applyQuaternion(new THREE.Quaternion(...placed.quaternion))
+      .normalize();
+    const side = new THREE.Vector3().crossVectors(e.ray.direction, axisX);
+    const normal = new THREE.Vector3().crossVectors(axisX, side);
+    if (normal.lengthSq() < 1e-8) {
+      // Looking straight down the axis: any perpendicular plane will do.
+      normal.set(0, 1, 0).cross(axisX);
+    }
+    normal.normalize();
+    resizePlane.current.setFromNormalAndCoplanarPoint(
+      normal,
+      new THREE.Vector3(...placed.position),
+    );
+    (e.target as Element).setPointerCapture(e.pointerId);
+  };
+
+  const onHandleMove = (e: ThreeEvent<PointerEvent>) => {
+    const rs = resizingRef.current;
+    if (!rs) return;
+    if (!useAssembly.getState().resizing) {
+      resizingRef.current = null;
+      return;
+    }
+    e.stopPropagation();
+    const hit = new THREE.Vector3();
+    if (e.ray.intersectPlane(resizePlane.current, hit)) {
+      stretchSelectedTo(hit.x, hit.y, hit.z, rs.keepEnd);
+    }
+  };
+
+  const onHandleUp = (e: ThreeEvent<PointerEvent>) => {
+    if (e.button !== 2 || !resizingRef.current) return;
+    e.stopPropagation();
+    resizingRef.current = null;
+    setResizing(false);
+    // Swallow the native context menu this right-button release would fire.
+    contextMenuGuard.suppress = true;
+    (e.target as Element).releasePointerCapture(e.pointerId);
+  };
+
   return (
     <group
       position={placed.position}
@@ -704,7 +786,11 @@ export default function PartMesh({ placed }: { placed: PlacedComponent }) {
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
     >
-      <ShapeBody def={def} mat={selected ? steelSelected : baseMat} />
+      {/* Exported geometry: the DXF/PDF/IFC writers collect meshes under this
+          tagged group (port spheres, split markers, stretch handles excluded). */}
+      <group userData={{ pfPart: placed.uid }}>
+        <ShapeBody def={def} mat={selected ? steelSelected : baseMat} />
+      </group>
       {def.ports.map((p) => {
         const connectedPort = placed.connections.some((c) => c.portId === p.id);
         const isActive = activePort?.uid === placed.uid && activePort?.portId === p.id;
@@ -747,6 +833,33 @@ export default function PartMesh({ placed }: { placed: PlacedComponent }) {
             emissiveIntensity={0.5}
           />
         </mesh>
+      )}
+      {/* Stretch handles on the selected free tube: right-drag either end to
+          resize it, keeping the opposite end anchored (Escape cancels). */}
+      {def.stretchable && !connected && selected && (
+        <>
+          {(["p1", "p2"] as const).map((end) => {
+            const sign = end === "p1" ? -1 : 1;
+            const keepEnd = end === "p1" ? "p2" : "p1";
+            const half = (placed.lengthOverride ?? def.dims.len) / 2;
+            return (
+              <mesh
+                key={end}
+                position={[sign * half, 0, 0]}
+                onPointerDown={onHandleDown(keepEnd)}
+                onPointerMove={onHandleMove}
+                onPointerUp={onHandleUp}
+              >
+                <boxGeometry args={[0.22 * TAP, 0.22 * TAP, 0.22 * TAP]} />
+                <meshStandardMaterial
+                  color="#f97316"
+                  emissive="#f97316"
+                  emissiveIntensity={0.45}
+                />
+              </mesh>
+            );
+          })}
+        </>
       )}
     </group>
   );
